@@ -7,8 +7,17 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import { chunkMarkdown } from "../lib/chunk";
-import { embedBatch, activeEmbeddingModel, computeIdf } from "../lib/llm";
-import { EMBED_DIMENSIONS, USING_REAL_EMBEDDINGS } from "../lib/config";
+import {
+  embedBatch,
+  activeEmbeddingModel,
+  computeIdf,
+  lexicalEmbed,
+} from "../lib/llm";
+import {
+  EMBED_DIMENSIONS,
+  USING_REAL_EMBEDDINGS,
+  LEXICAL_MODEL,
+} from "../lib/config";
 import type { Chunk, EmbeddingsFile } from "../lib/types";
 
 const ROOT = process.cwd();
@@ -56,11 +65,31 @@ async function main() {
     `[embed] ${files.length} docs -> ${pending.length} chunks; embedder=${activeEmbeddingModel()} (real=${USING_REAL_EMBEDDINGS})`,
   );
 
+  const texts = pending.map((p) => p.text);
+
   // IDF over the chunk corpus (used by the lexical embedder so distinctive
   // terms dominate; ignored by the real-embeddings path).
-  const idf = USING_REAL_EMBEDDINGS ? {} : computeIdf(pending.map((p) => p.text));
+  let model = activeEmbeddingModel();
+  let idf: Record<string, number> = USING_REAL_EMBEDDINGS ? {} : computeIdf(texts);
+  let vectors: number[][];
 
-  const vectors = await embedBatch(pending.map((p) => p.text), idf);
+  try {
+    vectors = await embedBatch(texts, idf);
+  } catch (err) {
+    // Resilience: a bad/incompatible embeddings key (e.g. an OpenRouter key,
+    // which can't serve OpenAI embeddings) must NOT brick the whole build.
+    // Fall back to the lexical embedder so the deploy still succeeds (degraded
+    // retrieval). The runtime follows the artifact's model, so this stays
+    // consistent (lexical query embedding for a lexical artifact).
+    if (!USING_REAL_EMBEDDINGS) throw err;
+    console.warn(
+      `[embed] real embeddings failed (${(err as Error).message}); falling back to lexical so the build succeeds. Set a valid OpenAI-compatible EMBEDDINGS_API_KEY for real embeddings, or unset it to use lexical intentionally.`,
+    );
+    model = LEXICAL_MODEL;
+    idf = computeIdf(texts);
+    vectors = texts.map((t) => lexicalEmbed(t, idf));
+  }
+
   if (vectors.length !== pending.length) {
     throw new Error("embedding count mismatch");
   }
@@ -80,9 +109,9 @@ async function main() {
     };
   });
 
-  const thresholdHint = USING_REAL_EMBEDDINGS ? 0.35 : 0.08;
+  const thresholdHint = model === LEXICAL_MODEL ? 0.2 : 0.35;
   const file: EmbeddingsFile = {
-    model: activeEmbeddingModel(),
+    model,
     dimensions: EMBED_DIMENSIONS,
     builtAt: new Date().toISOString(),
     thresholdHint,
