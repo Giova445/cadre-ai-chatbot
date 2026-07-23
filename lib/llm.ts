@@ -163,7 +163,10 @@ export function getChatModel(): LanguageModel | null {
     apiKey: process.env.AI_CHAT_API_KEY,
     baseURL: process.env.AI_CHAT_BASE_URL || undefined,
   });
-  return provider(CHAT_MODEL);
+  // Use the Chat Completions API (.chat), which is universally OpenAI-compatible
+  // (OpenAI, OpenRouter, Together, etc.). The default provider(id) would hit the
+  // OpenAI-only Responses API (/v1/responses), which OpenRouter does not serve.
+  return provider.chat(CHAT_MODEL);
 }
 
 export { streamText };
