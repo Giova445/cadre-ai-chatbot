@@ -22,10 +22,15 @@ function isFlagStatus(value: string | undefined): value is FlagStatus {
   return value !== undefined && (FLAG_STATUSES as readonly string[]).includes(value);
 }
 
-function hrefFor(page: number, status: FlagStatus | undefined): string {
+function hrefFor(
+  page: number,
+  status: FlagStatus | undefined,
+  client: string | undefined,
+): string {
   const params = new URLSearchParams();
   if (page > 1) params.set("page", String(page));
   if (status) params.set("status", status);
+  if (client) params.set("client", client);
   const qs = params.toString();
   return qs ? `/admin/queue?${qs}` : "/admin/queue";
 }
@@ -45,7 +50,7 @@ const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
 export default async function QueuePage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; page?: string }>;
+  searchParams: Promise<{ status?: string; page?: string; client?: string }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
@@ -53,8 +58,10 @@ export default async function QueuePage({
   const parsedPage = Number.parseInt(sp.page ?? "1", 10);
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const status = isFlagStatus(sp.status) ? sp.status : undefined;
+  // Empty string collapses to undefined → the unscoped "All clients" read.
+  const client = sp.client || undefined;
 
-  const { rows, total } = await flagRepo.queue({ status, page, limit: LIMIT });
+  const { rows, total } = await flagRepo.queue({ status, page, limit: LIMIT, clientId: client });
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
@@ -63,6 +70,7 @@ export default async function QueuePage({
         <h1 className={styles.pageTitle}>Review queue</h1>
         <p className={styles.pageSub}>
           {total} flagged {total === 1 ? "answer" : "answers"}
+          {client ? ` · client: ${client}` : ""}
         </p>
       </div>
 
@@ -72,7 +80,7 @@ export default async function QueuePage({
           return (
             <Link
               key={filter.label}
-              href={hrefFor(1, filter.value)}
+              href={hrefFor(1, filter.value, client)}
               className={`${styles.filterChip} ${active ? styles.filterChipActive : ""}`}
               aria-current={active ? "true" : undefined}
             >
@@ -107,7 +115,11 @@ export default async function QueuePage({
                   <tr key={flag.id} className={styles.tableRow}>
                     <td className={styles.tableTextCell}>
                       <Link
-                        href={`/admin/conversations/${flag.conversationId}`}
+                        href={
+                          client
+                            ? `/admin/conversations/${flag.conversationId}?client=${encodeURIComponent(client)}`
+                            : `/admin/conversations/${flag.conversationId}`
+                        }
                         className={styles.cellLink}
                       >
                         {truncate(flag.queryText)}
@@ -132,7 +144,7 @@ export default async function QueuePage({
           </div>
           <nav className={styles.pagination} aria-label="Pagination">
             <Link
-              href={hrefFor(Math.max(1, page - 1), status)}
+              href={hrefFor(Math.max(1, page - 1), status, client)}
               className={`${styles.pageLink} ${page <= 1 ? styles.pageLinkDisabled : ""}`}
               aria-disabled={page <= 1}
               tabIndex={page <= 1 ? -1 : undefined}
@@ -143,7 +155,7 @@ export default async function QueuePage({
               Page {page} of {totalPages}
             </span>
             <Link
-              href={hrefFor(Math.min(totalPages, page + 1), status)}
+              href={hrefFor(Math.min(totalPages, page + 1), status, client)}
               className={`${styles.pageLink} ${page >= totalPages ? styles.pageLinkDisabled : ""}`}
               aria-disabled={page >= totalPages}
               tabIndex={page >= totalPages ? -1 : undefined}

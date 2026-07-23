@@ -145,3 +145,23 @@ create table if not exists answer_flags (
 create index if not exists answer_flags_status_idx  on answer_flags (status, created_at desc);
 create index if not exists answer_flags_message_idx on answer_flags (message_id);
 alter table answer_flags enable row level security;
+
+-- Rollout § B: client-scoped conversation list (applied via MCP migration
+-- cadre_conversations_client_index).
+create index if not exists conversations_client_last_at_idx
+  on conversations (client_id, last_at desc);
+
+-- Rollout § C: maker-configurable starter questions (DB tier). Applied via MCP
+-- migration cadre_starter_questions. Tenant-scoped, RLS-secure like the rest.
+create table if not exists starter_questions (
+  id         uuid primary key default gen_random_uuid(),
+  client_id  text not null default 'default',
+  position   int  not null default 0,
+  text       text not null,
+  enabled    boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (client_id, position)
+);
+create index if not exists starter_questions_client_idx on starter_questions (client_id, position);
+alter table starter_questions enable row level security;

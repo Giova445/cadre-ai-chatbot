@@ -39,6 +39,7 @@ export type Page<T> = { rows: T[]; total: number; page: number; limit: number };
 
 export type ConversationSummary = {
   id: string;
+  clientId: string; // tenant; surfaced in the admin "All clients" column
   sessionId: string;
   startedAt: string; // ISO
   lastAt: string; // ISO
@@ -93,9 +94,18 @@ export interface ConversationRepo {
     limit: number;
     mode?: DecisionMode;
     clientId?: string;
+    sessionId?: string; // deep-link to one session's history (per-user view)
   }): Promise<Page<ConversationSummary>>;
-  getDetail(id: string): Promise<ConversationDetail | null>;
+  // opts.clientId scopes the fetch so a crafted id can't cross tenants.
+  getDetail(id: string, opts?: { clientId?: string }): Promise<ConversationDetail | null>;
 }
+
+// Tenant summary for the admin client selector (Rollout § B — per-client history).
+export type ClientSummary = {
+  id: string;
+  conversationCount: number;
+  lastActivityAt: string | null; // ISO; null when the tenant has no logged turns
+};
 
 // ---------------------------------------------------------------------------
 // Phase 2 — admin auth (lib/admin/auth.ts). Signed-cookie gate, server-verified
@@ -148,7 +158,7 @@ export type FlagWithContext = FlagRow & {
 export interface FlagRepo {
   create(input: { messageId: string; category: FlagCategory; note: string }): Promise<void>;
   updateStatus(id: string, status: FlagStatus): Promise<void>;
-  queue(f: { status?: FlagStatus; page: number; limit: number }): Promise<Page<FlagWithContext>>;
+  queue(f: { status?: FlagStatus; page: number; limit: number; clientId?: string }): Promise<Page<FlagWithContext>>;
   // Flags grouped by assistant message id — powers the badges on the transcript.
   forMessages(messageIds: string[]): Promise<Record<string, FlagRow[]>>;
 }
@@ -176,5 +186,25 @@ export type GapRow = {
 };
 
 export interface GapRepo {
-  gaps(f: { page: number; limit: number; maxScore?: number }): Promise<Page<GapRow>>;
+  gaps(f: { page: number; limit: number; maxScore?: number; clientId?: string }): Promise<Page<GapRow>>;
+}
+
+// ---------------------------------------------------------------------------
+// Rollout § C — maker starter questions (DB tier; starter_questions table).
+// ---------------------------------------------------------------------------
+export type StarterRow = {
+  id: string;
+  clientId: string;
+  position: number;
+  text: string;
+  enabled: boolean;
+};
+
+export interface StarterRepo {
+  list(clientId: string): Promise<StarterRow[]>; // all rows, ordered by position (admin view)
+  publicList(clientId: string): Promise<string[]>; // enabled only, sanitized (public endpoint)
+  create(input: { clientId: string; text: string }): Promise<void>;
+  update(id: string, input: { text?: string; enabled?: boolean }): Promise<void>;
+  reorder(clientId: string, orderedIds: string[]): Promise<void>;
+  delete(id: string): Promise<void>;
 }

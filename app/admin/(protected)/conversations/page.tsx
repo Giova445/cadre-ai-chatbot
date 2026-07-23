@@ -18,10 +18,17 @@ function isDecisionMode(value: string | undefined): value is DecisionMode {
   return value === "answer" || value === "refuse" || value === "escalate";
 }
 
-function hrefFor(page: number, mode: DecisionMode | undefined): string {
+function hrefFor(
+  page: number,
+  mode: DecisionMode | undefined,
+  client: string | undefined,
+  session: string | undefined,
+): string {
   const params = new URLSearchParams();
   if (page > 1) params.set("page", String(page));
   if (mode) params.set("mode", mode);
+  if (client) params.set("client", client);
+  if (session) params.set("session", session);
   const qs = params.toString();
   return qs ? `/admin/conversations?${qs}` : "/admin/conversations";
 }
@@ -29,7 +36,7 @@ function hrefFor(page: number, mode: DecisionMode | undefined): string {
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; mode?: string }>;
+  searchParams: Promise<{ page?: string; mode?: string; client?: string; session?: string }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
@@ -37,9 +44,22 @@ export default async function ConversationsPage({
   const parsedPage = Number.parseInt(sp.page ?? "1", 10);
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const mode = isDecisionMode(sp.mode) ? sp.mode : undefined;
+  // Empty strings collapse to undefined → the unscoped "All clients" / all-sessions read.
+  const client = sp.client || undefined;
+  const session = sp.session || undefined;
 
-  const { rows, total } = await conversationRepo.list({ page, limit: LIMIT, mode });
+  const { rows, total } = await conversationRepo.list({
+    page,
+    limit: LIMIT,
+    mode,
+    clientId: client,
+    sessionId: session,
+  });
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+  // Show the Client column only in the unscoped "All clients" view AND only once
+  // a real (non-"default") tenant appears — so single-tenant deploys (where the
+  // header selector also self-hides) never see a redundant all-"default" column.
+  const showClient = !client && rows.some((row) => row.clientId !== "default");
 
   return (
     <div className={styles.page}>
@@ -47,8 +67,18 @@ export default async function ConversationsPage({
         <h1 className={styles.pageTitle}>Conversations</h1>
         <p className={styles.pageSub}>
           {total} logged {total === 1 ? "conversation" : "conversations"}
+          {client ? ` · client: ${client}` : ""}
         </p>
       </div>
+
+      {session && (
+        <p className={styles.pageNote}>
+          Filtered to session <code>{session}</code>.{" "}
+          <Link href={hrefFor(1, mode, client, undefined)} className={styles.cellLink}>
+            Clear session filter
+          </Link>
+        </p>
+      )}
 
       <div className={styles.filterChips} role="group" aria-label="Filter by decision mode">
         {MODE_FILTERS.map((filter) => {
@@ -56,7 +86,7 @@ export default async function ConversationsPage({
           return (
             <Link
               key={filter.label}
-              href={hrefFor(1, filter.value)}
+              href={hrefFor(1, filter.value, client, session)}
               className={`${styles.filterChip} ${active ? styles.filterChipActive : ""}`}
               aria-current={active ? "true" : undefined}
             >
@@ -70,10 +100,10 @@ export default async function ConversationsPage({
         <p className={styles.emptyState}>No conversations logged yet.</p>
       ) : (
         <>
-          <ConversationTable rows={rows} />
+          <ConversationTable rows={rows} showClient={showClient} activeClient={client} />
           <nav className={styles.pagination} aria-label="Pagination">
             <Link
-              href={hrefFor(Math.max(1, page - 1), mode)}
+              href={hrefFor(Math.max(1, page - 1), mode, client, session)}
               className={`${styles.pageLink} ${page <= 1 ? styles.pageLinkDisabled : ""}`}
               aria-disabled={page <= 1}
               tabIndex={page <= 1 ? -1 : undefined}
@@ -84,7 +114,7 @@ export default async function ConversationsPage({
               Page {page} of {totalPages}
             </span>
             <Link
-              href={hrefFor(Math.min(totalPages, page + 1), mode)}
+              href={hrefFor(Math.min(totalPages, page + 1), mode, client, session)}
               className={`${styles.pageLink} ${page >= totalPages ? styles.pageLinkDisabled : ""}`}
               aria-disabled={page >= totalPages}
               tabIndex={page >= totalPages ? -1 : undefined}

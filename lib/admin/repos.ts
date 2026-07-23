@@ -5,6 +5,7 @@
 // lib/retrieval-pgvector.ts).
 
 import { getDb } from "../db";
+import { clientFilter, sessionFilter } from "./filters";
 import type {
   ConversationDetail,
   ConversationRepo,
@@ -16,8 +17,6 @@ import type {
   TraceRow,
 } from "./contracts";
 
-const DEFAULT_CLIENT_ID = "default";
-
 // ---------------------------------------------------------------------------
 // Raw DB row shapes (snake_case). Numeric columns are typed `number | string`
 // because the pg driver returns some numeric types as strings; the mappers
@@ -26,6 +25,7 @@ const DEFAULT_CLIENT_ID = "default";
 // ---------------------------------------------------------------------------
 export type ConversationListRow = {
   id: string;
+  client_id: string;
   session_id: string;
   started_at: Date | string;
   last_at: Date | string;
@@ -79,6 +79,7 @@ function toIso(value: Date | string): string {
 export function mapConversationRow(row: ConversationListRow): ConversationSummary {
   return {
     id: row.id,
+    clientId: row.client_id,
     sessionId: row.session_id,
     startedAt: toIso(row.started_at),
     lastAt: toIso(row.last_at),
@@ -160,19 +161,24 @@ async function list(f: {
   limit: number;
   mode?: DecisionMode;
   clientId?: string;
+  sessionId?: string;
 }): Promise<Page<ConversationSummary>> {
-  const { page, limit, mode } = f;
-  const clientId = f.clientId ?? DEFAULT_CLIENT_ID;
+  const { page, limit, mode, clientId, sessionId } = f;
   const sql = getDb();
 
-  // Optional last_mode filter as a composable fragment (unqualified `last_mode`
-  // resolves to the conversations row in both the count and the list query).
+  // Composable fragments (each empty when its arg is absent). An absent
+  // `clientId` means the "All clients" view — unscoped across every tenant —
+  // NOT the "default" tenant; a concrete id scopes to that tenant. `sessionId`
+  // deep-links to one browser session's history (the per-user view). Unqualified
+  // columns resolve to the conversations row in both the count and list queries.
+  const cFilter = clientFilter(sql, clientId);
+  const sFilter = sessionFilter(sql, sessionId);
   const modeFilter = mode ? sql`and last_mode = ${mode}` : sql``;
 
   const countRows = await sql<{ total: number | string }[]>`
     select count(*) as total
     from conversations
-    where client_id = ${clientId} ${modeFilter}
+    where true ${cFilter} ${sFilter} ${modeFilter}
   `;
   const total = Number(countRows[0]?.total ?? 0);
 
@@ -180,6 +186,7 @@ async function list(f: {
   const rows = await sql<ConversationListRow[]>`
     select
       c.id,
+      c.client_id,
       c.session_id,
       c.started_at,
       c.last_at,
@@ -192,7 +199,7 @@ async function list(f: {
         limit 1
       ) as first_question
     from conversations c
-    where c.client_id = ${clientId} ${modeFilter}
+    where true ${cFilter} ${sFilter} ${modeFilter}
     order by c.last_at desc
     limit ${limit} offset ${offset}
   `;
@@ -205,13 +212,21 @@ async function list(f: {
   };
 }
 
-async function getDetail(id: string): Promise<ConversationDetail | null> {
+async function getDetail(
+  id: string,
+  opts?: { clientId?: string },
+): Promise<ConversationDetail | null> {
   const sql = getDb();
 
-  // Conversation is fetched across any tenant (admin view); null → not found.
+  // When opts.clientId is set, the fetch is scoped by client_id so a crafted id
+  // from another tenant returns null (not found) rather than crossing tenants.
+  // When absent (the "All clients" view), the conversation is fetched across any
+  // tenant, as before.
+  const cFilter = clientFilter(sql, opts?.clientId);
   const convRows = await sql<ConversationListRow[]>`
     select
       id,
+      client_id,
       session_id,
       started_at,
       last_at,
@@ -224,7 +239,7 @@ async function getDetail(id: string): Promise<ConversationDetail | null> {
         limit 1
       ) as first_question
     from conversations
-    where id = ${id}
+    where id = ${id} ${cFilter}
     limit 1
   `;
   const convRow = convRows[0];

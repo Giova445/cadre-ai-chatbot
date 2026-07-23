@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<!--
+  Fake "host" page for manually testing the embeddable widget cross-origin.
+
+  This file is served BY the Next app itself (public/widget-demo.html →
+  /widget-demo.html), so opening it at http://localhost:3000/widget-demo.html
+  is same-origin and does NOT exercise CORS. To actually test the widget as a
+  THIRD PARTY would see it:
+
+    1. Run the app normally:            pnpm dev            (http://localhost:3000)
+    2. Copy this file somewhere else and serve it on a DIFFERENT origin/port, e.g.:
+         cp public/widget-demo.html /tmp/host/index.html
+         cd /tmp/host && npx serve -l 5500      (or `python3 -m http.server 5500`)
+    3. Open http://localhost:5500 — the <script> below still points at
+       http://localhost:3000/widget.js (absolute), so:
+         - loading the script is a normal cross-origin <script> load (no CORS needed)
+         - the widget's `fetch` to /api/chat IS cross-origin and exercises
+           lib/cors.ts (set ALLOWED_ORIGINS=http://localhost:5500 to test the
+           locked-down path, or leave it unset for the allow-all dev default)
+
+  apiBase auto-derives from this script's own src (http://localhost:3000), so
+  the widget always talks back to the ORIGIN THAT SERVED IT, never the host
+  page's origin — that's also why the escalation CTA (contactUrl) is absolute.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acme Inc. — widget-demo host page</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #f5f5f5;
+        color: #222;
+      }
+      .wrap {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 64px 24px;
+      }
+      h1 { font-size: 28px; }
+      code {
+        background: #eee;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Acme Inc.</h1>
+      <p>
+        This is a fake host page. It embeds the Cadre AI support widget via a
+        single <code>&lt;script&gt;</code> tag — no other Cadre code runs
+        here. Look for the floating bubble in the bottom-right corner.
+      </p>
+      <p>
+        Try the starter-chip override below by uncommenting
+        <code>window.CadreChat</code>, or change <code>data-position</code> to
+        <code>bottom-left</code>.
+      </p>
+    </div>
+
+    <!-- Optional runtime-computed overrides — set BEFORE the loader tag.
+    <script>
+      window.CadreChat = {
+        starters: ["What's your refund policy?", "Do you offer a free trial?"],
+      };
+    </script>
+    -->
+
+    <script
+      src="http://localhost:3000/widget.js"
+      data-client="acme-demo"
+      data-color="#db4545"
+      data-position="bottom-right"
+      data-greeting="Hi! Ask me anything about Cadre AI."
+      data-launcher-label="Chat with us"
+      async
+    ></script>
+  </body>
+</html>

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "embed": "tsx scripts/embed.ts",
-    "prebuild": "tsx scripts/embed.ts",
+    "prebuild": "tsx scripts/embed.ts && pnpm run build:widget",
+    "build:widget": "esbuild widget/src/index.ts --bundle --minify --format=iife --target=es2020 --outfile=public/widget.js",
     "ingest": "tsx scripts/ingest.ts",
     "build": "next build",
     "start": "next start",
@@ -30,6 +31,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.24.2",
     "tsx": "^4.23.1",
     "typescript": "^5.6.0",
     "vitest": "^4.1.10"

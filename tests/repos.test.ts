@@ -14,6 +14,7 @@ import {
 describe("mapConversationRow", () => {
   const base: ConversationListRow = {
     id: "c-1",
+    client_id: "acme",
     session_id: "sess-abc",
     started_at: new Date("2026-07-23T10:00:00.000Z"),
     last_at: new Date("2026-07-23T10:05:30.000Z"),
@@ -55,6 +56,11 @@ describe("mapConversationRow", () => {
     expect(s.id).toBe("c-1");
     expect(s.sessionId).toBe("sess-abc");
     expect(s.firstQuestion).toBe("What services do you offer?");
+  });
+
+  it("surfaces the tenant client_id (for the All-clients column)", () => {
+    expect(mapConversationRow(base).clientId).toBe("acme");
+    expect(mapConversationRow({ ...base, client_id: "default" }).clientId).toBe("default");
   });
 });
 

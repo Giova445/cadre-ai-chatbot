@@ -23,9 +23,10 @@ function truncate(text: string, max = 90): string {
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
 
-function hrefFor(page: number): string {
+function hrefFor(page: number, client: string | undefined): string {
   const params = new URLSearchParams();
   if (page > 1) params.set("page", String(page));
+  if (client) params.set("client", client);
   const qs = params.toString();
   return qs ? `/admin/gaps?${qs}` : "/admin/gaps";
 }
@@ -33,15 +34,17 @@ function hrefFor(page: number): string {
 export default async function GapsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; client?: string }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
 
   const parsedPage = Number.parseInt(sp.page ?? "1", 10);
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  // Empty string collapses to undefined → the unscoped "All clients" read.
+  const client = sp.client || undefined;
 
-  const { rows, total } = await gapRepo.gaps({ page, limit: LIMIT });
+  const { rows, total } = await gapRepo.gaps({ page, limit: LIMIT, clientId: client });
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
@@ -50,6 +53,7 @@ export default async function GapsPage({
         <h1 className={styles.pageTitle}>KB gaps</h1>
         <p className={styles.pageSub}>
           {total} {total === 1 ? "candidate" : "candidates"} for KB improvement
+          {client ? ` · client: ${client}` : ""}
         </p>
       </div>
 
@@ -79,7 +83,14 @@ export default async function GapsPage({
                 {rows.map((gap) => (
                   <tr key={gap.traceId} className={styles.tableRow}>
                     <td className={styles.tableTextCell}>
-                      <Link href={`/admin/conversations/${gap.conversationId}`} className={styles.rowLink}>
+                      <Link
+                        href={
+                          client
+                            ? `/admin/conversations/${gap.conversationId}?client=${encodeURIComponent(client)}`
+                            : `/admin/conversations/${gap.conversationId}`
+                        }
+                        className={styles.rowLink}
+                      >
                         {truncate(gap.queryText)}
                       </Link>
                     </td>
@@ -100,7 +111,7 @@ export default async function GapsPage({
           </div>
           <nav className={styles.pagination} aria-label="Pagination">
             <Link
-              href={hrefFor(Math.max(1, page - 1))}
+              href={hrefFor(Math.max(1, page - 1), client)}
               className={`${styles.pageLink} ${page <= 1 ? styles.pageLinkDisabled : ""}`}
               aria-disabled={page <= 1}
               tabIndex={page <= 1 ? -1 : undefined}
@@ -111,7 +122,7 @@ export default async function GapsPage({
               Page {page} of {totalPages}
             </span>
             <Link
-              href={hrefFor(Math.min(totalPages, page + 1))}
+              href={hrefFor(Math.min(totalPages, page + 1), client)}
               className={`${styles.pageLink} ${page >= totalPages ? styles.pageLinkDisabled : ""}`}
               aria-disabled={page >= totalPages}
               tabIndex={page >= totalPages ? -1 : undefined}

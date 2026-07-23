@@ -5,6 +5,7 @@
 // live connection (mirrors lib/admin/repos.ts and lib/retrieval-pgvector.ts).
 
 import { getDb } from "../db";
+import { clientFilter } from "./filters";
 import type {
   FlagCategory,
   FlagRow,
@@ -119,20 +120,25 @@ async function queue(f: {
   status?: FlagStatus;
   page: number;
   limit: number;
+  clientId?: string;
 }): Promise<Page<FlagWithContext>> {
-  const { status, page, limit } = f;
+  const { status, page, limit, clientId } = f;
   const sql = getDb();
 
   // Optional status filter as a composable fragment; `where true` keeps the
   // clause valid whether or not the fragment is appended (mirrors repos.ts).
   const statusFilter = status ? sql`and f.status = ${status}` : sql``;
+  // Tenant scoping via answer_flags.client_id (already denormalized on the flag,
+  // so no join is needed). Unqualified `client_id` resolves to `f` — the only
+  // joined table here that carries the column. Absent → unscoped (All clients).
+  const cFilter = clientFilter(sql, clientId);
 
   const countRows = await sql<{ total: number | string }[]>`
     select count(*) as total
     from answer_flags f
     join messages m on m.id = f.message_id
     join retrieval_traces t on t.message_id = m.id
-    where true ${statusFilter}
+    where true ${statusFilter} ${cFilter}
   `;
   const total = Number(countRows[0]?.total ?? 0);
 
@@ -153,7 +159,7 @@ async function queue(f: {
     from answer_flags f
     join messages m on m.id = f.message_id
     join retrieval_traces t on t.message_id = m.id
-    where true ${statusFilter}
+    where true ${statusFilter} ${cFilter}
     order by f.created_at desc
     limit ${limit} offset ${offset}
   `;

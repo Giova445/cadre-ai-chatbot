@@ -17,18 +17,28 @@ const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
 
 export default async function ConversationDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ client?: string }>;
 }) {
   await requireAdmin();
   const { id } = await params;
+  const sp = await searchParams;
+  // The active client scopes the fetch: a crafted id from another tenant returns
+  // null → notFound, so the URL can't cross tenants. Empty string → unscoped.
+  const client = sp.client || undefined;
 
-  const detail = await conversationRepo.getDetail(id);
+  const detail = await conversationRepo.getDetail(id, { clientId: client });
   if (!detail) {
     notFound();
   }
 
   const { conversation, messages, traces } = detail;
+  const clientQs = client ? `?client=${encodeURIComponent(client)}` : "";
+  const sessionParams = new URLSearchParams({ session: conversation.sessionId });
+  if (client) sessionParams.set("client", client);
+  const sessionHref = `/admin/conversations?${sessionParams.toString()}`;
 
   // Flags are keyed by assistant message id — forMessages([]) is skipped so
   // the repo never has to special-case an empty id list.
@@ -38,7 +48,7 @@ export default async function ConversationDetailPage({
 
   return (
     <div className={styles.page}>
-      <Link href="/admin/conversations" className={styles.backLink}>
+      <Link href={`/admin/conversations${clientQs}`} className={styles.backLink}>
         ← All conversations
       </Link>
 
@@ -48,6 +58,14 @@ export default async function ConversationDetailPage({
           <div>
             <dt>Started</dt>
             <dd>{DATE_FORMAT.format(new Date(conversation.startedAt))}</dd>
+          </div>
+          <div>
+            <dt>Session</dt>
+            <dd>
+              <Link href={sessionHref} className={styles.cellLink}>
+                <code>{conversation.sessionId}</code>
+              </Link>
+            </dd>
           </div>
           <div>
             <dt>Turns</dt>

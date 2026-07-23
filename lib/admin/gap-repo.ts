@@ -58,8 +58,9 @@ async function gaps(f: {
   page: number;
   limit: number;
   maxScore?: number;
+  clientId?: string;
 }): Promise<Page<GapRow>> {
-  const { page, limit } = f;
+  const { page, limit, clientId } = f;
   const maxScore = f.maxScore ?? DEFAULT_MAX_SCORE;
   const sql = getDb();
 
@@ -73,11 +74,22 @@ async function gaps(f: {
     or exists (select 1 from answer_flags fx where fx.message_id = t.message_id)
   `;
 
+  // Tenant scoping. retrieval_traces/messages carry no client_id, so scope via an
+  // EXISTS back to conversations (m.conversation_id is in scope). Absent clientId
+  // → unscoped (All clients). The gapFilter is parenthesized before ANDing this
+  // in, so the client predicate can't be swallowed by the gapFilter's ORs.
+  const clientFilter = clientId
+    ? sql`and exists (
+        select 1 from conversations cc
+        where cc.id = m.conversation_id and cc.client_id = ${clientId}
+      )`
+    : sql``;
+
   const countRows = await sql<{ total: number | string }[]>`
     select count(*) as total
     from retrieval_traces t
     join messages m on m.id = t.message_id
-    where ${gapFilter}
+    where (${gapFilter}) ${clientFilter}
   `;
   const total = Number(countRows[0]?.total ?? 0);
 
@@ -96,7 +108,7 @@ async function gaps(f: {
       exists (select 1 from answer_flags f where f.message_id = t.message_id) as flagged
     from retrieval_traces t
     join messages m on m.id = t.message_id
-    where ${gapFilter}
+    where (${gapFilter}) ${clientFilter}
     order by t.created_at desc
     limit ${limit} offset ${offset}
   `;
