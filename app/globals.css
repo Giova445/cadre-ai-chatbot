@@ -560,6 +560,101 @@ button {
   color: var(--text-muted);
 }
 
+/* ---- markdown (assistant messages) --------------------------------------- */
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown p {
+  margin: 0 0 10px;
+}
+.markdown ul,
+.markdown ol {
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+.markdown li {
+  margin: 3px 0;
+}
+.markdown li::marker {
+  color: var(--red);
+}
+.markdown strong {
+  font-weight: 650;
+  color: var(--ink);
+}
+.markdown a {
+  color: var(--red-ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  background: var(--sand-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 5px;
+}
+.markdown pre {
+  background: var(--sand-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 0 0 10px;
+}
+.markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  font-family: var(--font-display-stack);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 12px 0 6px;
+  color: var(--ink);
+}
+.markdown h1 {
+  font-size: 1.25em;
+}
+.markdown h2 {
+  font-size: 1.15em;
+}
+.markdown h3 {
+  font-size: 1.05em;
+}
+.markdown blockquote {
+  margin: 0 0 10px;
+  padding-left: 12px;
+  border-left: 3px solid var(--line-strong);
+  color: var(--text-muted);
+}
+.markdown table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+  margin: 0 0 10px;
+  display: block;
+  overflow-x: auto;
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--line);
+  padding: 5px 9px;
+  text-align: left;
+}
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 12px 0;
+}
+
 /* ---- motion --------------------------------------------------------------- */
 @keyframes rise {
   from {

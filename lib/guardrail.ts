@@ -11,7 +11,7 @@
 //   • otherwise                 -> answer, grounded, with citations
 
 import type { Retrieved } from "./types";
-import { RETRIEVAL_THRESHOLD } from "./config";
+import { RETRIEVAL_THRESHOLD, HAS_CHAT_KEY } from "./config";
 import { isWeak } from "./retrieval";
 import { tokenize } from "./llm";
 
@@ -83,9 +83,13 @@ export function decide(query: string, results: Retrieved[]): Decision {
   if (isWeak(results)) {
     return { mode: "escalate", reason: "weak_retrieval", citations: [], topScore, coverage: cov };
   }
-  // Retrieval is above threshold, but if the query's distinctive terms aren't
-  // actually present in the retrieved text, don't confirm — refuse gracefully.
-  if (cov < COVERAGE_MIN) {
+  // Grounding-coverage guard (OFFLINE ONLY). With no chat model, retrieval is
+  // the only defense against confirming a fake ("do you offer <X>?"), so if the
+  // query's distinctive terms are absent from context, refuse. Online, the LLM's
+  // system-prompt grounding handles this far better, and this lexical guard
+  // otherwise over-refuses legitimately phrased questions (e.g. ones that carry
+  // formatting instructions whose words aren't in the KB).
+  if (!HAS_CHAT_KEY && cov < COVERAGE_MIN) {
     return { mode: "refuse", reason: "unsupported", citations, topScore, coverage: cov };
   }
   return { mode: "answer", reason: "grounded", citations, topScore, coverage: cov };

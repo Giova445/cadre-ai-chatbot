@@ -6,7 +6,7 @@ import { z } from "zod";
 import { embedQuery, getChatModel, hasChatModel, streamText } from "@/lib/llm";
 import { retrieve } from "@/lib/kb";
 import { decide } from "@/lib/guardrail";
-import { buildMessages } from "@/lib/prompt";
+import { buildSystem, buildConversation } from "@/lib/prompt";
 import { groundedStub, responseForDecision } from "@/lib/responses";
 import type { HistoryMessage } from "@/lib/types";
 
@@ -117,7 +117,11 @@ export async function POST(req: Request) {
   try {
     const result = streamText({
       model,
-      messages: buildMessages({ query, context: results, history }),
+      // System prompt + retrieved context go in `system` (Responses API requires
+      // this); `messages` carries only user/assistant turns, so multi-turn
+      // history is preserved without an illegal system message.
+      system: buildSystem(results),
+      messages: buildConversation({ query, history }),
     });
     return new Response(
       iterableStream(result.textStream, groundedStub(results)),

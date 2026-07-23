@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Wordmark, BoxMark } from "./logo";
 
 type Role = "user" | "assistant";
@@ -184,7 +186,15 @@ export default function Page() {
                 </span>
                 {m.content ? (
                   <>
-                    {m.content}
+                    {m.role === "assistant" ? (
+                      <div className="markdown">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {m.content}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      m.content
+                    )}
                     {m.role === "assistant" &&
                       m.sources &&
                       m.sources.length > 0 && (
