@@ -53,7 +53,17 @@ create table if not exists kb_chunks (
 );
 
 create index if not exists kb_chunks_client_idx on kb_chunks (client_id);
+-- Covering index for the documents FK (cascade deletes + joins).
+create index if not exists kb_chunks_document_idx on kb_chunks (document_id);
 
 -- Cosine ANN index. HNSW gives fast top-k; cheap to build at this doc count.
 create index if not exists kb_chunks_embedding_idx
   on kb_chunks using hnsw (embedding vector_cosine_ops);
+
+-- Secure by default. The app connects via the privileged Postgres role
+-- (DATABASE_URL), which BYPASSES RLS, so retrieval + ingest keep working.
+-- Enabling RLS with NO policies denies the anon/authenticated (PostgREST/public
+-- API) roles entirely, so the KB is never exposed through the public REST API.
+alter table documents   enable row level security;
+alter table ingest_jobs enable row level security;
+alter table kb_chunks   enable row level security;
