@@ -1,6 +1,8 @@
 // Streaming chat endpoint. Custom plain-text streaming protocol (no AI-SDK UI
 // protocol coupling) so the app behaves identically offline (grounded stub) and
 // online (streamed LLM answer). Guardrail/escalation metadata rides in headers.
+// Cross-origin embeds (the widget) are gated by an origin allowlist + CORS, and
+// runaway cost is capped by a best-effort rate limiter.
 
 import { z } from "zod";
 import { getChatModel, hasChatModel, streamText } from "@/lib/llm";
@@ -8,6 +10,8 @@ import { retrieveText, EFFECTIVE_THRESHOLD } from "@/lib/kb";
 import { decide } from "@/lib/guardrail";
 import { buildSystem, buildConversation } from "@/lib/prompt";
 import { groundedStub, responseForDecision } from "@/lib/responses";
+import { corsHeaders, isOriginAllowed } from "@/lib/cors";
+import { rateLimit } from "@/lib/ratelimit";
 import type { HistoryMessage } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -62,17 +66,47 @@ function iterableStream(
   });
 }
 
+// CORS preflight for cross-origin widget embeds.
+export async function OPTIONS(req: Request) {
+  const origin = req.headers.get("origin");
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders(origin, req.headers.get("host")),
+  });
+}
+
 export async function POST(req: Request) {
+  const origin = req.headers.get("origin");
+  const host = req.headers.get("host");
+  const cors = corsHeaders(origin, host);
+
+  // Cross-origin gate (browser only; non-browser abuse is caught by rate limit).
+  if (!isOriginAllowed(origin, host)) {
+    return new Response("Origin not allowed.", { status: 403, headers: cors });
+  }
+
+  // Best-effort abuse/cost cap (per-IP). Distributed limit = Tier-1 Upstash.
+  const ip =
+    (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "unknown";
+  if (!rateLimit(ip).ok) {
+    return new Response("Rate limit exceeded. Please wait a moment.", {
+      status: 429,
+      headers: { ...cors, "Retry-After": "60" },
+    });
+  }
+
   let parsed: z.infer<typeof BodySchema>;
   try {
     parsed = BodySchema.parse(await req.json());
   } catch {
-    return new Response("Invalid request body.", { status: 400 });
+    return new Response("Invalid request body.", { status: 400, headers: cors });
   }
 
   const messages = parsed.messages;
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  if (!lastUser) return new Response("No user message.", { status: 400 });
+  if (!lastUser) {
+    return new Response("No user message.", { status: 400, headers: cors });
+  }
   const query = lastUser.content;
   const history: HistoryMessage[] = messages.slice(0, -1).map((m) => ({
     role: m.role,
@@ -93,6 +127,7 @@ export async function POST(req: Request) {
         coverage: 0,
       }),
       { mode: "escalate", reason: "embed_error", sources: [], topScore: 0 },
+      cors,
     );
   }
   const decision = decide(query, results, EFFECTIVE_THRESHOLD);
@@ -105,13 +140,17 @@ export async function POST(req: Request) {
 
   // Non-answer paths are deterministic text — no model needed.
   if (decision.mode !== "answer") {
-    return streamed(responseForDecision(decision), meta);
+    return streamed(responseForDecision(decision), meta, cors);
   }
 
   // Answer path: real model when a key exists, else an offline grounded stub.
   const model = getChatModel();
   if (!hasChatModel() || !model) {
-    return streamed(groundedStub(results), { ...meta, reason: "grounded_offline" });
+    return streamed(
+      groundedStub(results),
+      { ...meta, reason: "grounded_offline" },
+      cors,
+    );
   }
 
   try {
@@ -123,20 +162,24 @@ export async function POST(req: Request) {
       system: buildSystem(results),
       messages: buildConversation({ query, history }),
     });
-    return new Response(
-      iterableStream(result.textStream, groundedStub(results)),
-      { headers: metaHeaders(meta) },
-    );
+    return new Response(iterableStream(result.textStream, groundedStub(results)), {
+      headers: metaHeaders(meta, cors),
+    });
   } catch {
     // Model failure -> still return grounded context we already retrieved.
-    return streamed(groundedStub(results), { ...meta, reason: "grounded_fallback" });
+    return streamed(
+      groundedStub(results),
+      { ...meta, reason: "grounded_fallback" },
+      cors,
+    );
   }
 }
 
 type Meta = { mode: string; reason: string; sources: string[]; topScore: number };
 
-function metaHeaders(meta: Meta): HeadersInit {
+function metaHeaders(meta: Meta, cors: Record<string, string>): HeadersInit {
   return {
+    ...cors,
     "Content-Type": "text/plain; charset=utf-8",
     "Cache-Control": "no-store",
     "x-cadre-mode": meta.mode,
@@ -146,6 +189,10 @@ function metaHeaders(meta: Meta): HeadersInit {
   };
 }
 
-function streamed(text: string, meta: Meta): Response {
-  return new Response(encoderStream(text), { headers: metaHeaders(meta) });
+function streamed(
+  text: string,
+  meta: Meta,
+  cors: Record<string, string>,
+): Response {
+  return new Response(encoderStream(text), { headers: metaHeaders(meta, cors) });
 }
