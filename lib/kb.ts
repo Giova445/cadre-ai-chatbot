@@ -17,6 +17,12 @@ const KB = embeddingsJson as unknown as EmbeddingsFile;
 // when an embeddings key happens to be set with a lexical artifact).
 const KB_IS_LEXICAL = KB.model === LEXICAL_MODEL;
 
+// The pgvector backend always retrieves via REAL embeddings, regardless of the
+// bundled artifact's model. So the effective embedder is lexical ONLY when the
+// bundle backend is serving a lexical artifact — this drives the offline cutoff
+// below (real scores separate ~0.35; lexical ~0.20).
+const RETRIEVAL_IS_LEXICAL = KB_IS_LEXICAL && RETRIEVAL_BACKEND !== "pgvector";
+
 // Effective answer/escalate cutoff. When a chat model is present the LLM is the
 // arbiter, so keep the bar LOW and let it ground legit queries / decline
 // off-topic via its scope rule (short vague queries score low even with real
@@ -24,7 +30,7 @@ const KB_IS_LEXICAL = KB.model === LEXICAL_MODEL;
 // gate deterministically, tuned per embedder.
 export const EFFECTIVE_THRESHOLD = Number(
   process.env.RETRIEVAL_THRESHOLD ??
-    (HAS_CHAT_KEY ? "0.05" : KB_IS_LEXICAL ? "0.20" : "0.35"),
+    (HAS_CHAT_KEY ? "0.05" : RETRIEVAL_IS_LEXICAL ? "0.20" : "0.35"),
 );
 
 export function getKB(): EmbeddingsFile {
