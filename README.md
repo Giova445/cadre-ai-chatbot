@@ -51,9 +51,9 @@ The mode is chosen per-key at runtime; there is no separate "demo build."
 | — | set | `lexical-hash-512` | **streamed LLM answer**, grounded in retrieved context |
 | set | set | `text-embedding-3-small` | **streamed LLM answer**, grounded in retrieved context |
 
-**Why this exists.** Retrieval, thresholds, guardrails, escalation, and the eval harness all exercise the same pipeline regardless of keys. Cosine scores stay comparable because *the same embedder runs at build time and query time*. The lexical embedder is signed feature-hashing over word tokens (FNV-1a → 512-dim, L2-normalized): cosine similarity approximates shared-token overlap, which is enough to rank a ~dozen-chunk KB. It is **lexical, not semantic** — that trade-off, and the lower calibrated threshold it needs, are covered in [TRADEOFFS.md](TRADEOFFS.md).
+**Why this exists.** Retrieval, thresholds, guardrails, escalation, and the eval harness all exercise the same pipeline regardless of keys. Cosine scores stay comparable because *the same embedder runs at build time and query time*. The lexical embedder is signed feature-hashing over word tokens (FNV-1a → 512-dim, L2-normalized): cosine similarity approximates shared-token overlap, which is enough to rank a few-dozen-chunk KB (8 docs → 36 chunks). It is **lexical, not semantic** — that trade-off, and the lower calibrated threshold it needs, are covered in [TRADEOFFS.md](TRADEOFFS.md).
 
-The guardrails never depend on the LLM. Pricing questions, explicit human requests, and weak retrieval are decided by a **deterministic function** (`lib/guardrail.ts` → `decide()`) before any model is called, so refusals and escalations behave identically in every mode.
+The guardrails never depend on the LLM. Pricing questions, explicit human requests, weak retrieval, and **unsupported claims** are decided by a **deterministic function** (`lib/guardrail.ts` → `decide()`) before any model is called, so refusals and escalations behave identically in every mode. The unsupported check is a **grounding-coverage guard**: even when a query clears the retrieval threshold, if its distinctive terms are not actually present in the retrieved chunk text (coverage < 0.4), the bot refuses rather than confirm. This is what makes "Do you offer a 24/7 managed AI hosting plan?" refuse — retrieval alone scored it almost identically to a real-service question (~0.279 vs ~0.281), so cosine could not separate them; the coverage guard does. It works with real embeddings too.
 
 ---
 
@@ -64,6 +64,7 @@ One Next.js (App Router) app, one Vercel deploy. No separate backend, no databas
 ```
 Chat UI → POST /api/chat → embedQuery(query) → cosine top-k over bundled vectors
         → guardrail decide()  ── refuse / escalate → deterministic text
+                              │   (pricing · human · weak retrieval · unsupported)
                               └─ answer → streamText (LLM) or grounded stub
         → plain-text stream (+ x-cadre-* metadata headers)
 ```
@@ -77,7 +78,7 @@ Chat UI → POST /api/chat → embedQuery(query) → cosine top-k over bundled v
 | `lib/retrieval.ts` | Pure cosine similarity + top-k + weak-retrieval test. No I/O. |
 | `lib/kb.ts` | Binds the generated artifact to the pure retrieval core. |
 | `lib/llm.ts` | The one provider seam: offline lexical embedder, real embeddings, and the chat model factory. |
-| `lib/guardrail.ts` | Deterministic `decide()` — pricing → refuse, human → escalate, weak → escalate, else answer. |
+| `lib/guardrail.ts` | Deterministic `decide()` — pricing → refuse, human → escalate, weak → escalate, unsupported (grounding-coverage < 0.4) → refuse, else answer. |
 | `lib/prompt.ts` | Persona + grounding + escalation system prompt; builds the model message array. |
 | `lib/responses.ts` | On-brand deterministic copy for refusal/escalation/grounded-stub paths. |
 | `lib/config.ts` | Central config; `RETRIEVAL_THRESHOLD` is the single guardrail knob. |
@@ -91,17 +92,32 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full C4 view, data-flow diagrams,
 
 ## Evals and tests
 
-The bot is built **eval-first**: "correct" is defined before features. The golden set is 9 cases — 6 core support scenarios plus 3 adversarial cases (pricing bait, off-topic, hallucination bait) — with per-case `expect` (`grounded` / `refuse` / `escalate`), `mustCite`, and `mustNotSay` assertions (contract typed in `lib/types.ts` as `GoldenCase`; full table in [SPEC.md](SPEC.md)).
+The bot is built **eval-first**: "correct" is defined before features. The golden set (`evals/golden.json`) is 9 cases — 6 core support scenarios (all `grounded`) plus 3 adversarial cases (`adv-pricing` → refuse, `adv-offtopic` → escalate, `adv-hallucination` → refuse) — with per-case `expect` (`grounded` / `refuse` / `escalate`), `mustCite`, and `mustNotSay` assertions (contract typed in `lib/types.ts` as `GoldenCase`; full table in [SPEC.md](SPEC.md)).
 
 ```bash
-pnpm eval         # run the golden set through the decision pipeline → pass/fail report
-pnpm test         # unit tests (Vitest) over the pure cores (retrieval, chunk, guardrail)
-pnpm typecheck    # tsc --noEmit
+pnpm eval         # run the golden set through the decision pipeline → 9/9 PASS
+pnpm test         # Vitest over the pure cores → 20/20 pass
+pnpm typecheck    # tsc --noEmit → clean
 ```
 
-The eval runner drives the same deterministic `decide()` the route uses, so it validates guardrail behavior without spending a token. Unit tests target the pure, I/O-free modules (`lib/retrieval.ts`, `lib/chunk.ts`, `lib/guardrail.ts`), which need no artifact or key.
+The eval runner (`evals/run.ts`) reproduces the real request path — embed the question, retrieve top-k, run the same deterministic `decide()` the route uses, materialize the exact user-facing text — and asserts it against each case, without spending a token. Unit tests target the pure, I/O-free modules (`lib/retrieval.ts`, `lib/chunk.ts`, `lib/guardrail.ts`, and the lexical embedder in `lib/llm.ts`), which need no artifact or key.
 
 ---
+
+## Verification
+
+The final build is green end to end:
+
+| Check | Result |
+|---|---|
+| `pnpm typecheck` | clean (`tsc --noEmit`) |
+| `pnpm test` | **20/20 pass** (retrieval, embedder, guardrail, chunk) |
+| `pnpm eval` | **9/9 PASS** — 6 core grounded + cited, `adv-pricing` refuses with no figure, `adv-offtopic` escalates, `adv-hallucination` refuses (coverage guard) |
+| `next build` | succeeds — 5 routes; `/` and `/contact` prerendered static, `/api/chat` dynamic (Node runtime) |
+| RAG artifact | `data/embeddings.json` generated: 8 docs → **36 chunks**, dim 512 |
+| Live smoke test | grounded answer streams with its source header; a pricing question refuses with no dollar figure; an off-topic question escalates |
+
+The committed artifact is built by the offline lexical embedder (`model: "lexical-hash-512"`), so the repo clones and runs green with no keys. Supplying `EMBEDDINGS_API_KEY` and re-running `pnpm embed` swaps in real `text-embedding-3-small` vectors.
 
 ## Deploy to Vercel
 

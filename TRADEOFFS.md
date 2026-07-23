@@ -80,13 +80,15 @@ At ~8–10 documents (a few dozen chunks of 512-dim vectors) a full linear scan 
 
 ## 6. Deterministic guardrail vs. trusting the model to police itself
 
-**Chosen:** a pure `decide()` (`lib/guardrail.ts`) routes pricing → refuse, explicit-human → escalate, weak/empty retrieval → escalate, else answer — **before** any model call, and it is the same function the eval runner asserts against.
+**Chosen:** a pure `decide()` (`lib/guardrail.ts`) routes pricing → refuse, explicit-human → escalate, weak/empty retrieval → escalate, unsupported-claim → refuse, else answer — **before** any model call, and it is the same function the eval runner asserts against.
 
 **Pros:** Layer 1 guardrails can't be prompt-injected around (the model is never asked to enforce "don't quote pricing"); the decision is testable without spending a token; and the evals validate the exact logic that runs in production. The grounding system prompt (`lib/prompt.ts`) is Layer 2, defense-in-depth, and treats retrieved text as data, not instructions.
 
-**Cons:** regex intent detection is coarse — it can misjudge an oddly phrased pricing or human-handoff request. Mitigation: the retrieval threshold backstops unknown/off-topic questions regardless of phrasing, and Layer 2 catches what Layer 1 misses. A production version would replace the regex with a small intent classifier behind the same interface.
+**The grounding-coverage guard — why threshold alone isn't enough.** A cosine threshold answers "is *something* relevant nearby?" but not "does the context actually support *this specific claim*?" The hallucination-bait case exposes the gap: "Do you offer a 24/7 managed AI hosting plan?" retrieved the services doc at ~0.279, essentially tied with a genuine-service question at ~0.281. No threshold can split those. So after the threshold check, `decide()` computes **coverage** — the fraction of the query's distinctive terms (tokenized, minus ubiquitous words like "cadre"/"ai"/"service") that actually appear in the retrieved text — and refuses (`reason: "unsupported"`) below `COVERAGE_MIN = 0.4`. The fake plan's distinctive terms ("hosting", "24/7", "money-back") are absent from the KB, so it refuses instead of confirming. Cost: a legitimately terse query could dip under the floor; mitigated by the 0.4 threshold and the ubiquitous-term exclusion. Benefit: it is **embedder-agnostic** — it works identically with the lexical embedder and with real embeddings — and it converts "retrieval got close" into "but the docs don't say that," which is exactly the anti-hallucination behavior a support bot needs.
 
-**When it flips:** when intent detection needs to be robust across paraphrase and adversarial phrasing, swap the regex for a classifier — the `decide()` signature stays, so the route and evals don't change.
+**Cons:** regex intent detection (pricing/human) is coarse — it can misjudge an oddly phrased request. Mitigation: the retrieval threshold and the coverage guard backstop unknown/off-topic/unsupported questions regardless of phrasing, and Layer 2 catches what Layer 1 misses. A production version would replace the regex with a small intent classifier behind the same interface.
+
+**When it flips:** when intent detection needs to be robust across paraphrase and adversarial phrasing, swap the regex for a classifier and tune `COVERAGE_MIN` against a larger eval set — the `decide()` signature stays, so the route and evals don't change.
 
 ---
 

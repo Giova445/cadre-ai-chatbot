@@ -42,15 +42,17 @@ function iterableStream(
   const enc = new TextEncoder();
   return new ReadableStream({
     async start(controller) {
+      let any = false;
       try {
-        let any = false;
         for await (const delta of iter) {
           any = true;
           controller.enqueue(enc.encode(delta));
         }
         if (!any) controller.enqueue(enc.encode(fallback));
       } catch {
-        controller.enqueue(enc.encode(fallback));
+        // Only fall back if nothing streamed yet — never append the stub onto
+        // a partially-streamed answer (which would read as garbled).
+        if (!any) controller.enqueue(enc.encode(fallback));
       } finally {
         controller.close();
       }

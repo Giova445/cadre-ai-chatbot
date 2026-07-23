@@ -31,11 +31,15 @@ export type Decision = {
   coverage: number; // fraction of distinctive query terms present in context
 };
 
+// Pricing intent. Deliberately targets clear pricing words; "budget"/"afford"
+// were dropped to avoid over-refusing legitimate finance/ROI questions.
 const PRICING_RE =
-  /\b(pric(e|ing|es)?|cost(s)?|how much|quote|fee(s)?|charge(s)?|dollar|budget|afford|expensive|cheap)\b|\$/i;
+  /\b(pric(e|ing|es)?|cost(s)?|how much|quote|fee(s)?|charge(s)?|rate(s)?|retainer|dollar|expensive|cheap)\b|\$/i;
 
+// Explicit request for a person. The human object is required so "speak to our
+// CRM" or "connect to your API" don't trip the human-handoff path.
 const HUMAN_RE =
-  /\b(human|a person|real person|representative|talk to (a )?(person|someone|human)|speak (to|with)|contact (a|someone))\b/i;
+  /\b(human|real person|representative|(talk|speak) (to|with) (a |an |the )?(person|someone|human|rep|representative|agent|advisor|strategist|team|expert)|contact (a person|a human|someone))\b/i;
 
 // Terms too ubiquitous across the KB to be evidence that a SPECIFIC thing is
 // supported by the retrieved context.
@@ -52,8 +56,10 @@ const COVERAGE_MIN = 0.4;
 function coverage(query: string, results: Retrieved[]): number {
   const terms = [...new Set(tokenize(query))].filter((t) => !UBIQUITOUS.has(t));
   if (terms.length === 0) return 1;
-  const hay = results.map((r) => r.chunk.text.toLowerCase()).join(" \n ");
-  const found = terms.filter((t) => hay.includes(t)).length;
+  // Token-boundary match (not substring) so "command" can't be satisfied by
+  // "commander" and partial overlaps don't inflate coverage.
+  const contextTokens = new Set(results.flatMap((r) => tokenize(r.chunk.text)));
+  const found = terms.filter((t) => contextTokens.has(t)).length;
   return found / terms.length;
 }
 

@@ -45,17 +45,44 @@ function splitSections(markdown: string): Section[] {
   return sections;
 }
 
+// Split a body into atomic blocks separated by blank lines, but keep fenced
+// code blocks whole even when they contain blank lines.
+function splitIntoBlocks(body: string): string[] {
+  const lines = body.split(/\r?\n/);
+  const blocks: string[] = [];
+  let buf: string[] = [];
+  let inFence = false;
+  const flush = () => {
+    const text = buf.join("\n").trim();
+    if (text) blocks.push(text);
+    buf = [];
+  };
+  for (const line of lines) {
+    if (/^```/.test(line.trim())) {
+      if (!inFence) {
+        flush(); // start a fresh fenced block
+        inFence = true;
+        buf.push(line);
+      } else {
+        buf.push(line);
+        inFence = false;
+        flush(); // close the fenced block as one atomic unit
+      }
+      continue;
+    }
+    if (!inFence && line.trim() === "") flush();
+    else buf.push(line);
+  }
+  flush();
+  return blocks;
+}
+
 // Split a block of paragraphs into token-bounded pieces with overlap. Never
 // breaks inside a fenced code block or a markdown table.
 function splitBody(body: string): string[] {
   if (estTokens(body) <= MAX_TOKENS) return [body.trim()];
 
-  // Atomic blocks separated by blank lines; fenced code / tables stay whole.
-  const blocks: string[] = [];
-  const paras = body.split(/\n{2,}/);
-  for (const p of paras) {
-    if (p.trim()) blocks.push(p.trim());
-  }
+  const blocks = splitIntoBlocks(body);
 
   const pieces: string[] = [];
   let buf: string[] = [];

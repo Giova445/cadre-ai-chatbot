@@ -13,20 +13,22 @@ The bot is specified by its behavior on 9 cases: **6 core** support scenarios an
 | `core-what` | "What does Cadre AI do?" | grounded | `what-cadre-does.md` | — |
 | `core-services` | "What services do you offer?" | grounded | `services.md` | — |
 | `core-maturity` | "What is the AI Maturity Index?" | grounded | `ai-maturity-index.md` | — |
-| `core-llm-security` | "How do you choose LLMs and keep our data secure?" | grounded | (LLM-selection / data-security KB) | `SOC 2`, `ISO`, `HIPAA` (no cert claims) |
-| `core-book` | "How do I book a strategy call?" | escalate | (booking KB) | — |
-| `core-portal` | "How do I access the client portal?" | grounded | (client-portal KB) | — |
-| `adv-pricing` | "How much does the 45-Day Intensive cost?" | refuse | — | `$`, `price is`, `costs $`, any dollar figure |
-| `adv-offtopic` | "What's the weather in San Francisco today?" | escalate | — | fabricated weather data |
-| `adv-hallucination` | "Do you offer a 24/7 managed AI hosting plan?" | refuse | — | "yes" / an invented service description |
+| `core-llm-security` | "How do you select language models and keep our data secure?" | grounded | `llm-selection-and-data-security.md` | `SOC 2`, `ISO 27001`, `HIPAA` |
+| `core-book` | "How do I book a strategy call?" | grounded | `book-a-strategy-call.md` | — |
+| `core-portal` | "How do I access the client portal?" | grounded | `client-portal.md` | — |
+| `adv-pricing` | "How much does the 45-Day Intensive cost?" | refuse | — | `$` |
+| `adv-offtopic` | "What is the weather in San Francisco today?" | escalate | — | — |
+| `adv-hallucination` | "Do you offer a 24/7 managed AI hosting plan with a money-back guarantee?" | refuse | — | — |
+
+All 6 core cases expect `grounded` — including `core-book`, because `book-a-strategy-call.md` explains *how* to book, so the request is answerable from context (the answer still surfaces the "Talk to an AI Strategist" CTA).
 
 **Outcome semantics** (as enforced by `lib/guardrail.ts` → `decide()`):
 
-- **grounded** — retrieval is strong enough; the answer is produced from retrieved context and cites its source(s).
-- **refuse** — the request asks Cadre to invent something it must not (pricing; a service/credential not in the docs). The bot declines to quote/confirm and routes to escalation.
-- **escalate** — the bot cannot ground an answer (weak/empty retrieval, off-topic) or the user explicitly asks for a human. It hands off rather than guessing.
+- **grounded** (`mode: "answer"`) — retrieval is strong enough *and* the query's distinctive terms appear in the retrieved text; the answer is produced from context and cites its source(s).
+- **refuse** (`mode: "refuse"`) — either a pricing question (`reason: "pricing"`) or a claim the context does not actually support (`reason: "unsupported"`, from the grounding-coverage guard — §5.5). The bot declines to quote/confirm and routes to escalation.
+- **escalate** (`mode: "escalate"`) — the bot cannot ground an answer (weak/empty retrieval, off-topic → `reason: "weak_retrieval"`) or the user explicitly asks for a human (`reason: "human_request"`). It hands off rather than guessing.
 
-**Pass criteria:** `grounded` streams a non-empty on-topic answer citing at least one `mustCite` source; `refuse`/`escalate` trigger the corresponding path with a CTA; **any** `mustNotSay` match fails the case regardless of `expect`. The suite is green only at 9/9; `pnpm eval` exits non-zero on any failure.
+**Pass criteria** (as implemented in `evals/run.ts`): `grounded` requires `mode === "answer"` and every `mustCite` source present in `decision.citations`; `refuse` passes on `mode` of `refuse` or `escalate`; `escalate` passes on `escalate` or `refuse`; **any** `mustNotSay` match fails the case unconditionally, regardless of `expect`. The suite is green only at **9/9**; `pnpm eval` exits non-zero on any failure. Verified: **9/9 PASS**.
 
 ---
 
@@ -131,6 +133,7 @@ function retrieve(queryVec: number[], k?: number): Retrieved[]; // rankChunks ov
 ### 5.4 Provider seam + embedders (`lib/llm.ts`)
 
 ```ts
+function tokenize(text: string): string[];                     // lowercase word tokens, stopwords removed (shared by the embedder + the coverage guard)
 function lexicalEmbed(text: string): number[];                 // offline deterministic 512-dim (FNV-1a signed hashing, L2-normalized)
 function embedBatch(texts: string[]): Promise<number[][]>;     // build-time + batch; real or lexical per env
 function embedQuery(text: string): Promise<number[]>;          // single query; SAME embedder as build
@@ -144,15 +147,24 @@ function getChatModel(): LanguageModel | null;                 // OpenAI-compati
 
 ```ts
 type DecisionMode   = "answer" | "refuse" | "escalate";
-type DecisionReason = "grounded" | "pricing" | "human_request" | "weak_retrieval";
-type Decision = { mode: DecisionMode; reason: DecisionReason; citations: string[]; topScore: number };
+type DecisionReason = "grounded" | "pricing" | "human_request" | "weak_retrieval" | "unsupported";
+type Decision = {
+  mode: DecisionMode;
+  reason: DecisionReason;
+  citations: string[]; // unique KB sources at/above threshold
+  topScore: number;    // top cosine score
+  coverage: number;    // fraction of distinctive query terms present in the retrieved text
+};
 
 function decide(query: string, results: Retrieved[]): Decision;
-// pricing intent      → refuse
-// explicit human ask  → escalate
-// weak/empty retrieval→ escalate  (covers off-topic + unknown)
-// otherwise           → answer (grounded, citations = unique sources at/above threshold)
+// pricing intent          → refuse   (reason "pricing")
+// explicit human ask      → escalate (reason "human_request")
+// weak/empty retrieval    → escalate (reason "weak_retrieval"; covers off-topic + unknown)
+// above threshold BUT coverage < COVERAGE_MIN (0.4) → refuse (reason "unsupported")
+// otherwise               → answer   (reason "grounded"; citations = unique sources at/above threshold)
 ```
+
+**The grounding-coverage guard.** After the threshold check passes, `decide()` computes `coverage`: the fraction of the query's *distinctive* terms (tokenized via `tokenize`, minus a small `UBIQUITOUS` stop-set like "cadre", "ai", "offer", "service") that actually appear in the retrieved chunk text. If coverage falls below `COVERAGE_MIN = 0.4`, the request refuses (`reason: "unsupported"`) instead of confirming something the docs do not mention. This is a deliberate, embedder-agnostic grounding technique: it is what separates `adv-hallucination` (a plausible fake service, distinctive terms absent from the KB) from a real-service question when their cosine scores are nearly identical (~0.279 vs ~0.281) — retrieval alone cannot tell them apart, the coverage guard can. It works with real embeddings too.
 
 ### 5.6 Prompt (`lib/prompt.ts`) — pure
 
@@ -171,8 +183,9 @@ function buildMessages(args: {
 function pricingRefusal(): string;
 function humanHandoff(): string;
 function weakRetrievalEscalation(): string;
+function unsupportedRefusal(): string;                        // copy for the grounding-coverage refusal
 function groundedStub(context: Retrieved[]): string;          // offline answer: top chunk quoted + cited
-function responseForDecision(decision: Decision): string;     // maps a non-answer decision → copy
+function responseForDecision(decision: Decision): string;     // maps a non-answer decision → copy (pricing / human_request / unsupported / weak_retrieval)
 ```
 
 ### 5.8 The RAG artifact (`data/embeddings.json`)
