@@ -24,16 +24,19 @@ export async function GET() {
     };
     if (!loaded) ok = false;
 
-    // Report the ACTUAL retrieval mode (derived from the artifact the runtime
-    // follows), not the env flag. Flag a build-vs-env divergence: a lexical
-    // artifact with EMBEDDINGS_API_KEY set means the key is unused for retrieval.
+    // Report the embedder actually used for RETRIEVAL. pgvector always embeds
+    // queries with the real model (the bundle artifact is unused there), so the
+    // artifact-divergence check only applies to the bundle backend.
     const artifactLexical = kb.model === LEXICAL_MODEL;
-    checks.embeddings = {
-      mode: artifactLexical ? "lexical" : "real",
-      artifactModel: kb.model,
-      envRealFlag: USING_REAL_EMBEDDINGS,
-      divergence: artifactLexical && USING_REAL_EMBEDDINGS,
-    };
+    checks.embeddings =
+      RETRIEVAL_BACKEND === "pgvector"
+        ? { mode: "real", source: "pgvector-query", realKeyPresent: USING_REAL_EMBEDDINGS }
+        : {
+            mode: artifactLexical ? "lexical" : "real",
+            artifactModel: kb.model,
+            envRealFlag: USING_REAL_EMBEDDINGS,
+            divergence: artifactLexical && USING_REAL_EMBEDDINGS,
+          };
   } catch (e) {
     ok = false;
     checks.kb = { loaded: false, error: (e as Error).message };
@@ -46,13 +49,21 @@ export async function GET() {
   // selected but no connection string) degrades so a monitor catches it — no
   // connection is opened here (that deep probe lands with the ingestion pillar).
   const dbConfigured = Boolean(process.env.DATABASE_URL);
-  const backendMisconfigured = RETRIEVAL_BACKEND === "pgvector" && !dbConfigured;
+  const pgvector = RETRIEVAL_BACKEND === "pgvector";
+  // pgvector needs BOTH a connection string and a real embeddings key (queries
+  // are embedded with the real model); either missing = every query would fail.
+  const misconfig =
+    pgvector && !dbConfigured
+      ? "pgvector backend selected but DATABASE_URL is unset"
+      : pgvector && !USING_REAL_EMBEDDINGS
+        ? "pgvector backend requires real embeddings (EMBEDDINGS_API_KEY unset)"
+        : null;
   checks.retrieval = {
     backend: RETRIEVAL_BACKEND,
     dbConfigured,
-    ...(backendMisconfigured ? { error: "pgvector backend selected but DATABASE_URL is unset" } : {}),
+    ...(misconfig ? { error: misconfig } : {}),
   };
-  if (backendMisconfigured) ok = false;
+  if (misconfig) ok = false;
 
   return Response.json(
     { status: ok ? "ok" : "degraded", checks, ts: new Date().toISOString() },
