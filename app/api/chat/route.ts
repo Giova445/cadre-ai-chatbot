@@ -55,10 +55,13 @@ function iterableStream(
           controller.enqueue(enc.encode(delta));
         }
         if (!any) controller.enqueue(enc.encode(fallback));
-      } catch {
-        // Only fall back if nothing streamed yet — never append the stub onto
-        // a partially-streamed answer (which would read as garbled).
+      } catch (err) {
+        // Before any token: fall back to the grounded stub. After partial
+        // output: don't garble it with the stub — mark it interrupted so the
+        // user (and logs) know it's incomplete rather than silently truncated.
         if (!any) controller.enqueue(enc.encode(fallback));
+        else controller.enqueue(enc.encode("\n\n_(response interrupted)_"));
+        console.error("[chat] stream error:", err);
       } finally {
         controller.close();
       }
@@ -161,11 +164,16 @@ export async function POST(req: Request) {
   try {
     const result = streamText({
       model,
-      // System prompt + retrieved context go in `system` (Responses API requires
-      // this); `messages` carries only user/assistant turns, so multi-turn
-      // history is preserved without an illegal system message.
+      // System prompt + retrieved context go in `system` (Chat Completions maps
+      // it); `messages` carries only user/assistant turns, so multi-turn history
+      // is preserved without an illegal system message.
       system: buildSystem(results),
       messages: buildConversation({ query, history }),
+      // Stop consuming (and billing) the provider if the client disconnects.
+      abortSignal: req.signal,
+      // Provider/network errors surface here (the textStream swallows them), so
+      // this is the reliable operational signal for mid-stream failures.
+      onError: ({ error }) => console.error("[chat] stream error:", error),
     });
     return new Response(iterableStream(result.textStream, groundedStub(results)), {
       headers: metaHeaders(meta, cors),
