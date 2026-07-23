@@ -17,16 +17,14 @@ const KB = embeddingsJson as unknown as EmbeddingsFile;
 // when an embeddings key happens to be set with a lexical artifact).
 const KB_IS_LEXICAL = KB.model === LEXICAL_MODEL;
 
-// Effective answer/escalate cutoff, derived from the ACTUAL retriever (the
-// artifact), so it can never disagree with the embedder being used:
-//  - real embeddings: 0.35 (semantic scores separate well).
-//  - lexical + chat model: 0.05 (let vague-but-legit queries reach the LLM,
-//    which grounds legit ones and declines off-topic via its scope rule).
-//  - lexical + no chat model (offline eval/demo): 0.20 (reject off-topic
-//    deterministically since there is no LLM to arbitrate).
+// Effective answer/escalate cutoff. When a chat model is present the LLM is the
+// arbiter, so keep the bar LOW and let it ground legit queries / decline
+// off-topic via its scope rule (short vague queries score low even with real
+// embeddings, so a high bar wrongly escalates them). Only OFFLINE (no LLM) do we
+// gate deterministically, tuned per embedder.
 export const EFFECTIVE_THRESHOLD = Number(
   process.env.RETRIEVAL_THRESHOLD ??
-    (KB_IS_LEXICAL ? (HAS_CHAT_KEY ? "0.05" : "0.20") : "0.35"),
+    (HAS_CHAT_KEY ? "0.05" : KB_IS_LEXICAL ? "0.20" : "0.35"),
 );
 
 export function getKB(): EmbeddingsFile {
