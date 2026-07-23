@@ -4,7 +4,7 @@
 // (DB/Blob reachability) land with the persistence pillars.
 
 import { getKB } from "@/lib/kb";
-import { HAS_CHAT_KEY, USING_REAL_EMBEDDINGS, LEXICAL_MODEL } from "@/lib/config";
+import { HAS_CHAT_KEY, USING_REAL_EMBEDDINGS, LEXICAL_MODEL, RETRIEVAL_BACKEND } from "@/lib/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +41,18 @@ export async function GET() {
   }
 
   checks.chat = { keyPresent: HAS_CHAT_KEY, mode: HAS_CHAT_KEY ? "llm" : "offline-stub" };
+
+  // Retrieval backend posture. pgvector needs DATABASE_URL; a misconfig (backend
+  // selected but no connection string) degrades so a monitor catches it — no
+  // connection is opened here (that deep probe lands with the ingestion pillar).
+  const dbConfigured = Boolean(process.env.DATABASE_URL);
+  const backendMisconfigured = RETRIEVAL_BACKEND === "pgvector" && !dbConfigured;
+  checks.retrieval = {
+    backend: RETRIEVAL_BACKEND,
+    dbConfigured,
+    ...(backendMisconfigured ? { error: "pgvector backend selected but DATABASE_URL is unset" } : {}),
+  };
+  if (backendMisconfigured) ok = false;
 
   return Response.json(
     { status: ok ? "ok" : "degraded", checks, ts: new Date().toISOString() },

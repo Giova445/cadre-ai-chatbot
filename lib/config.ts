@@ -5,6 +5,17 @@ export const LEXICAL_MODEL = "lexical-hash-512";
 export const EMBED_DIMENSIONS = 512;
 export const TOP_K = 6;
 
+// Retrieval backend:
+//  - "bundle"   (default): in-memory cosine over the build-time data/embeddings.json
+//                artifact. Zero infra; the working core. Never loads pg.
+//  - "pgvector": Supabase Postgres + pgvector. Requires DATABASE_URL and REAL
+//                embeddings (EMBEDDINGS_API_KEY); inert until provisioned + seeded
+//                (`pnpm ingest`). Anything other than "pgvector" resolves to bundle.
+export const RETRIEVAL_BACKEND: "bundle" | "pgvector" =
+  (process.env.RETRIEVAL_BACKEND ?? "").trim().toLowerCase() === "pgvector"
+    ? "pgvector"
+    : "bundle";
+
 // True when a real OpenAI-compatible embeddings key is present; otherwise the
 // deterministic offline lexical embedder is used (build + runtime stay in sync).
 export const USING_REAL_EMBEDDINGS = Boolean(process.env.EMBEDDINGS_API_KEY);

@@ -375,6 +375,27 @@ Phased, each phase independently shippable and behind the `RETRIEVAL_BACKEND` fl
 
 ---
 
+## Provisioning runbook (Supabase pgvector) — AS-BUILT
+
+Phase-0/1 landed against **Supabase** (chosen over Neon) with the flag-gated store below. Divergences from the plan above: the datastore is Supabase; the schema is applied via `db/schema.sql` (not `scripts/migrate.ts`); seeding is `scripts/ingest.ts` / `pnpm ingest` (not `embed --target`). `RETRIEVAL_BACKEND` still defaults to `bundle`, so nothing here activates until you complete these steps.
+
+**Shipped (inert until provisioned):** `lib/db.ts` (lazy pooled client), `lib/retrieval-pgvector.ts` (cosine `<=>` top-k → `Retrieved[]`), `db/schema.sql` (tenant-scoped tables + HNSW), `scripts/ingest.ts`, the `RETRIEVAL_BACKEND` branch in `lib/kb.ts`, and the `/api/health` retrieval-posture check.
+
+1. **Create the project** — Supabase → New project. `pgvector` ships with Supabase; `db/schema.sql` runs `create extension if not exists vector`.
+2. **Apply schema** — Supabase Studio → SQL Editor → paste `db/schema.sql` → Run. (Or `psql "$DIRECT_URL" -f db/schema.sql` using the **session/direct** connection string.)
+3. **Set env** (local `.env.local`, and Vercel project env for deploy):
+   - `DATABASE_URL` = the **transaction-mode pooler** URL (port 6543) — required for serverless.
+   - `EMBEDDINGS_API_KEY` (+ `EMBEDDINGS_BASE_URL` for OpenRouter) — pgvector is real-embeddings only.
+   - Leave `RETRIEVAL_BACKEND` unset for now (still `bundle`).
+4. **Seed** — `pnpm ingest` (reads `content/*.md`, embeds real, upserts into `kb_chunks` for client `default`; idempotent per source). Requires `DATABASE_URL` + a real key; refuses otherwise.
+5. **Shadow-verify** — set `RETRIEVAL_BACKEND=pgvector` in a preview/local env and run `pnpm eval`. The golden set + retrieval/guardrail tests must pass unchanged (parity gate).
+6. **Flip** — set `RETRIEVAL_BACKEND=pgvector` in prod and redeploy.
+7. **Rollback** — unset `RETRIEVAL_BACKEND` (→ `bundle`). The build-time artifact still ships, so this is a single-env-var revert.
+
+> **What I cannot do from here:** create the Supabase account/project, or set Vercel env / redeploy. Provision + set the vars above; I can then run `db/schema.sql` + `pnpm ingest` and the parity eval if you expose `DATABASE_URL` to a local env (via `--env-file`, so I never read the secret).
+
+---
+
 ## Sources
 
 - [Encore — pgvector vs Pinecone: Which Vector Database to Choose in 2026][enc]

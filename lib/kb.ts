@@ -5,7 +5,7 @@
 
 import type { EmbeddingsFile, Retrieved } from "./types";
 import { rankChunks } from "./retrieval";
-import { TOP_K, LEXICAL_MODEL, HAS_CHAT_KEY } from "./config";
+import { TOP_K, LEXICAL_MODEL, HAS_CHAT_KEY, RETRIEVAL_BACKEND } from "./config";
 import { lexicalEmbed, embedQueryReal } from "./llm";
 import embeddingsJson from "@/data/embeddings.json";
 
@@ -44,6 +44,17 @@ export async function retrieveText(
   query: string,
   k: number = TOP_K,
 ): Promise<Retrieved[]> {
+  // pgvector backend: rank in Postgres. Real-embeddings only, so the query is
+  // embedded with the same model the DB was seeded with. Dynamically imported so
+  // the default `bundle` path never loads `postgres`.
+  if (RETRIEVAL_BACKEND === "pgvector") {
+    const vec = await embedQueryReal(query);
+    const { retrievePgvector } = await import("./retrieval-pgvector");
+    return retrievePgvector(vec, k);
+  }
+
+  // bundle backend (default): in-memory cosine over the build-time artifact,
+  // following the artifact's embedder (lexical or real) so query/chunk match.
   const vec = KB_IS_LEXICAL
     ? lexicalEmbed(query, KB.idf)
     : await embedQueryReal(query);
