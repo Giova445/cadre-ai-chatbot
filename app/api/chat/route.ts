@@ -15,6 +15,7 @@ import { corsHeaders, isOriginAllowed } from "@/lib/cors";
 import { rateLimit } from "@/lib/ratelimit";
 import { logTurn } from "@/lib/trace";
 import { RETRIEVAL_BACKEND, EMBED_MODEL } from "@/lib/config";
+import { resolveClient } from "@/lib/clients";
 import { SID_COOKIE } from "@/lib/admin/contracts";
 import type { Decision } from "@/lib/guardrail";
 import type { HistoryMessage, Retrieved } from "@/lib/types";
@@ -34,6 +35,11 @@ const BodySchema = z.object({
     )
     .min(1)
     .max(40),
+  // Widget-only (optional): the tenant id for per-client logging, and a
+  // client-owned session id (the `cadre_sid` cookie is SameSite=Lax and can't
+  // group a widget's cross-site turns). Both are validated/resolved server-side.
+  client: z.string().max(64).optional(),
+  sessionId: z.string().min(8).max(128).optional(),
 });
 
 function encoderStream(text: string): ReadableStream<Uint8Array> {
@@ -137,9 +143,15 @@ export async function POST(req: Request) {
     content: m.content,
   }));
 
-  // Group a visitor's turns into one conversation via a non-identifying,
-  // httpOnly session id (minted on the first turn). Powers the admin trace view.
-  const { sid, setCookie } = readOrCreateSid(req);
+  // Tenant id for logging: resolve the untrusted body `client` fail-closed
+  // against the registry + Origin (never trust the raw value).
+  const clientId = resolveClient({ client: parsed.client, origin });
+  // Session identity: prefer the widget's client-owned `sessionId` (cross-site
+  // safe); fall back to the httpOnly `cadre_sid` cookie for the same-origin app.
+  // Only mint/set the cookie when the body did not supply its own id.
+  const cookie = readOrCreateSid(req);
+  const sid = parsed.sessionId ?? cookie.sid;
+  const setCookie = parsed.sessionId ? undefined : cookie.setCookie;
 
   let results;
   try {
@@ -157,7 +169,7 @@ export async function POST(req: Request) {
       coverage: 0,
     };
     const errText = responseForDecision(errDecision);
-    scheduleTurnLog({ sid, query, assistantMessage: errText, decision: errDecision, results: [] });
+    scheduleTurnLog({ sid, clientId, query, assistantMessage: errText, decision: errDecision, results: [] });
     return streamed(
       errText,
       { mode: "escalate", reason: "embed_error", sources: [], topScore: 0 },
@@ -176,7 +188,7 @@ export async function POST(req: Request) {
   // Non-answer paths are deterministic text — no model needed.
   if (decision.mode !== "answer") {
     const text = responseForDecision(decision);
-    scheduleTurnLog({ sid, query, assistantMessage: text, decision, results });
+    scheduleTurnLog({ sid, clientId, query, assistantMessage: text, decision, results });
     return streamed(text, meta, cors, setCookie);
   }
 
@@ -184,7 +196,7 @@ export async function POST(req: Request) {
   const model = getChatModel();
   if (!hasChatModel() || !model) {
     const text = groundedStub(results);
-    scheduleTurnLog({ sid, query, assistantMessage: text, decision, results });
+    scheduleTurnLog({ sid, clientId, query, assistantMessage: text, decision, results });
     return streamed(text, { ...meta, reason: "grounded_offline" }, cors, setCookie);
   }
 
@@ -207,14 +219,14 @@ export async function POST(req: Request) {
       resolveText = resolve;
     });
     const body = iterableStream(result.textStream, groundedStub(results), resolveText);
-    scheduleTurnLog({ sid, query, assistantMessage: assistantText, decision, results });
+    scheduleTurnLog({ sid, clientId, query, assistantMessage: assistantText, decision, results });
     return new Response(body, { headers: metaHeaders(meta, cors, setCookie) });
   } catch (err) {
     // Synchronous streamText failure -> still return grounded context. (Provider
     // errors surface during stream iteration; see the iterableStream fallback.)
     console.error("[chat] chat model failed:", err);
     const text = groundedStub(results);
-    scheduleTurnLog({ sid, query, assistantMessage: text, decision, results });
+    scheduleTurnLog({ sid, clientId, query, assistantMessage: text, decision, results });
     return streamed(text, { ...meta, reason: "grounded_fallback" }, cors, setCookie);
   }
 }
@@ -270,6 +282,7 @@ function readOrCreateSid(req: Request): { sid: string; setCookie?: string } {
 // when the stream closes. logTurn itself swallows all errors.
 function scheduleTurnLog(args: {
   sid: string;
+  clientId: string;
   query: string;
   assistantMessage: string | Promise<string>;
   decision: Decision;
@@ -279,6 +292,7 @@ function scheduleTurnLog(args: {
     const assistantMessage = await args.assistantMessage;
     await logTurn({
       sessionId: args.sid,
+      clientId: args.clientId,
       userMessage: args.query,
       assistantMessage,
       query: args.query,

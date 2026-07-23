@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Wordmark, BoxMark } from "./logo";
+import { DEFAULT_STARTERS as SCENARIOS } from "@/lib/starters";
 
 type Role = "user" | "assistant";
 type Msg = {
@@ -12,15 +13,6 @@ type Msg = {
   sources?: string[];
   mode?: string; // answer | refuse | escalate
 };
-
-const SCENARIOS = [
-  "What does Cadre AI do?",
-  "What services do you offer?",
-  "What is the AI Maturity Index?",
-  "How do you choose LLMs and keep our data secure?",
-  "How do I book a strategy call?",
-  "How do I access the client portal?",
-];
 
 const CONTACT_URL = "/contact";
 const CONTACT_EMAIL = "hello@gocadre.ai";
