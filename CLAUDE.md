@@ -2,9 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Status: greenfield
+## Status: Tier 0 built & tested
 
-Only [plan.md](plan.md) exists so far — no application code, `package.json`, or build config yet. `plan.md` is the authoritative contract; build against it. This file summarizes the decisions a future instance needs before there is code to read. Update it once real modules land (fill in exact commands, correct any drift from the plan).
+The app is implemented and green: `pnpm build`, `pnpm typecheck`, `pnpm test` (20/20), and `pnpm eval` (9/9) all pass; a live smoke test confirms grounded / refuse / escalate. See [ARCHITECTURE.md](ARCHITECTURE.md), [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), [SPEC.md](SPEC.md), [DECISIONS.md](DECISIONS.md), and [README.md](README.md). `plan.md` remains the authoritative product contract.
+
+**Key as-built facts** (some diverge from the original plan — see DECISIONS.md):
+- **Offline-first**: with no API keys the whole pipeline runs via a deterministic **lexical-hash-512** embedder (`lexicalEmbed` in [lib/llm.ts](lib/llm.ts)); real `text-embedding-3-small` (dim 512) and a streamed LLM answer switch on when `EMBEDDINGS_API_KEY` / `AI_CHAT_API_KEY` are set.
+- **Guardrail** = `decide()` in [lib/guardrail.ts](lib/guardrail.ts): pricing→refuse, human-request→escalate, weak retrieval→escalate, and a **grounding-coverage guard** (query terms absent from context → refuse). `RETRIEVAL_THRESHOLD` is mode-aware; leave it unset.
+- **`/api/chat`** uses a custom plain-text stream with `x-cadre-*` metadata headers (not the AI SDK UI protocol).
+- Run `pnpm embed` before `tsc`/`next build`: [lib/kb.ts](lib/kb.ts) statically imports the generated `data/embeddings.json`.
+- pnpm 11 config lives in `pnpm-workspace.yaml` (`allowBuilds`, `verifyDepsBeforeRun: false`), not the `package.json` `pnpm` field.
 
 ## What this is
 
@@ -65,15 +72,18 @@ Eval-first (TDD for the bot): write `evals/golden.json` — the 6 core scenarios
 
 Maintain **`DECISIONS.md`**: for notable code, record whether it was Claude-generated vs. modified, and why. This is explicitly part of the deliverable.
 
-## Commands (planned — confirm/replace once `package.json` exists)
+## Commands (verified)
 
-Package manager is **pnpm** per the plan.
+Package manager is **pnpm**.
 
 ```bash
 pnpm install
-pnpm dev          # Next.js dev server
-pnpm build        # includes running scripts/embed.ts to regenerate data/embeddings.json
-pnpm eval         # run the golden-set eval runner → pass/fail report
+pnpm dev          # Next.js dev server (run `pnpm embed` once first)
+pnpm embed        # regenerate data/embeddings.json from content/*.md
+pnpm build        # prebuild runs embed, then next build
+pnpm test         # vitest — unit tests (20/20)
+pnpm eval         # golden-set runner → pass/fail (9/9)
+pnpm typecheck    # tsc --noEmit
 ```
 
-There is no lint/test config yet — add the real commands here when they're set up.
+If a pnpm script is blocked by the build-approval check, either the `pnpm-workspace.yaml` settings apply, or invoke the binary directly (e.g. `node_modules/.bin/tsx scripts/embed.ts`).
