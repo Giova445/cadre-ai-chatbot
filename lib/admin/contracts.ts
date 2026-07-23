@@ -104,3 +104,77 @@ export interface ConversationRepo {
 export type AdminSession = { authenticated: true; issuedAt: number };
 export const ADMIN_COOKIE = "cadre_admin";
 export const SID_COOKIE = "cadre_sid";
+
+// ---------------------------------------------------------------------------
+// Phase 4 — bad-answer flagging + review queue (answer_flags table).
+// ---------------------------------------------------------------------------
+export type FlagCategory =
+  | "hallucination"
+  | "wrong_source"
+  | "missed_escalation"
+  | "tone"
+  | "incomplete"
+  | "other";
+export const FLAG_CATEGORIES: FlagCategory[] = [
+  "hallucination",
+  "wrong_source",
+  "missed_escalation",
+  "tone",
+  "incomplete",
+  "other",
+];
+
+export type FlagStatus = "open" | "triaged" | "resolved" | "wontfix";
+export const FLAG_STATUSES: FlagStatus[] = ["open", "triaged", "resolved", "wontfix"];
+
+export type FlagRow = {
+  id: string;
+  messageId: string;
+  category: FlagCategory;
+  note: string;
+  status: FlagStatus;
+  createdAt: string;
+  resolvedAt: string | null;
+};
+
+// A flag joined with the context a reviewer needs in the queue.
+export type FlagWithContext = FlagRow & {
+  conversationId: string;
+  queryText: string;
+  mode: string;
+  assistantContent: string;
+};
+
+export interface FlagRepo {
+  create(input: { messageId: string; category: FlagCategory; note: string }): Promise<void>;
+  updateStatus(id: string, status: FlagStatus): Promise<void>;
+  queue(f: { status?: FlagStatus; page: number; limit: number }): Promise<Page<FlagWithContext>>;
+  // Flags grouped by assistant message id — powers the badges on the transcript.
+  forMessages(messageIds: string[]): Promise<Record<string, FlagRow[]>>;
+}
+
+// Server actions (lib/admin/actions.ts, "use server"; each calls requireAdmin +
+// validates with Zod). UI imports these:
+//   createFlag(input: { messageId, category, note }): Promise<void>
+//   updateFlagStatus(input: { id, status }): Promise<void>
+
+// ---------------------------------------------------------------------------
+// Phase 6 — KB-gap view (turns worth improving: escalated/weak, low top-score,
+// or flagged — the durable "what the KB is missing" list).
+// ---------------------------------------------------------------------------
+export type GapRow = {
+  traceId: string;
+  messageId: string;
+  conversationId: string;
+  queryText: string;
+  mode: string;
+  reason: string;
+  topScore: number;
+  coverage: number;
+  createdAt: string;
+  flagged: boolean;
+};
+
+export interface GapRepo {
+  gaps(f: { page: number; limit: number; maxScore?: number }): Promise<Page<GapRow>>;
+}

@@ -2,9 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin/auth";
 import { conversationRepo } from "@/lib/admin/repos";
+import { flagRepo } from "@/lib/admin/flag-repo";
 import { TranscriptTurn } from "../../../_components/TranscriptTurn";
 import { RetrievalTracePanel } from "../../../_components/RetrievalTracePanel";
 import { ModeBadge } from "../../../_components/ModeBadge";
+import { FlagBadge } from "../../../_components/FlagBadge";
+import { FlagForm } from "../../../_components/FlagForm";
 import styles from "../../../admin.module.css";
 
 const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
@@ -26,6 +29,12 @@ export default async function ConversationDetailPage({
   }
 
   const { conversation, messages, traces } = detail;
+
+  // Flags are keyed by assistant message id — forMessages([]) is skipped so
+  // the repo never has to special-case an empty id list.
+  const assistantMessageIds = messages.filter((m) => m.role === "assistant").map((m) => m.id);
+  const flagsByMessage =
+    assistantMessageIds.length > 0 ? await flagRepo.forMessages(assistantMessageIds) : {};
 
   return (
     <div className={styles.page}>
@@ -55,11 +64,25 @@ export default async function ConversationDetailPage({
 
       <div className={styles.transcript} role="log" aria-label="Conversation transcript">
         {messages.map((message) => {
-          const trace = message.role === "assistant" ? traces[message.id] : undefined;
+          const isAssistant = message.role === "assistant";
+          const trace = isAssistant ? traces[message.id] : undefined;
+          const flags = isAssistant ? flagsByMessage[message.id] ?? [] : [];
           return (
             <div key={message.id} className={styles.transcriptItem}>
               <TranscriptTurn message={message} />
               {trace && <RetrievalTracePanel trace={trace} />}
+              {isAssistant && (
+                <div className={styles.flagArea}>
+                  {flags.length > 0 && (
+                    <div className={styles.flagList} aria-label="Flags on this answer">
+                      {flags.map((flag) => (
+                        <FlagBadge key={flag.id} flag={flag} />
+                      ))}
+                    </div>
+                  )}
+                  <FlagForm messageId={message.id} />
+                </div>
+              )}
             </div>
           );
         })}

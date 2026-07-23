@@ -548,6 +548,235 @@
   border-color: var(--line);
 }
 
+/* ---- plain in-cell link (rows with additional interactive controls, e.g.
+   the queue table, where a stretched full-row link would sit on top of the
+   StatusControl buttons per default CSS stacking rules) --------------------- */
+.cellLink {
+  color: var(--text);
+  font-weight: 500;
+}
+.cellLink:hover {
+  color: var(--red-ink);
+}
+
+/* ---- page note callout (gaps view) ---------------------------------------- */
+.pageNote {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line-strong);
+  border-radius: var(--radius-card);
+  padding: 10px 14px;
+}
+
+/* ---- flagged badge (gaps view) --------------------------------------------- */
+.flaggedBadge {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--red-tint);
+  color: var(--red-ink);
+  border: 1px solid var(--red-ink);
+}
+
+/* ---- status pill (flag review status) -------------------------------------- */
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.statusOpen {
+  background: var(--status-amber-bg);
+  color: var(--status-amber-fg);
+  border-color: var(--status-amber-line);
+}
+.statusTriaged {
+  background: var(--status-blue-bg);
+  color: var(--status-blue-fg);
+  border-color: var(--status-blue-line);
+}
+.statusResolved {
+  background: var(--status-green-bg);
+  color: var(--status-green-fg);
+  border-color: var(--status-green-line);
+}
+.statusWontfix {
+  background: var(--sand-2);
+  color: var(--text-subtle);
+  border-color: var(--line);
+}
+
+/* ---- flag badge (category + status pill, transcript view) ------------------ */
+.flagBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 12px;
+}
+.flagBadgeCategory {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* ---- flag area under an assistant transcript turn --------------------------- */
+.flagArea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 820px;
+  align-self: flex-start;
+}
+.flagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---- flag form (create a flag) ---------------------------------------------- */
+.flagTrigger {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.flagTrigger:hover {
+  border-color: var(--red);
+  color: var(--text);
+}
+
+.flagForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  background: var(--sand-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 12px 14px;
+}
+.flagFormField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.flagFormLabel {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-subtle);
+}
+.flagSelect,
+.flagInput {
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  min-width: 160px;
+}
+.flagInput {
+  min-width: 220px;
+}
+.flagSelect:focus-visible,
+.flagInput:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 1px;
+}
+.flagFormActions {
+  display: flex;
+  gap: 8px;
+}
+.flagSubmitBtn {
+  background: var(--red);
+  color: var(--sand);
+  border: 1px solid var(--red);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.flagSubmitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.flagCancelBtn {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  padding: 7px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.flagCancelBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.flagFormError {
+  width: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--red-ink);
+}
+
+/* ---- status control (queue row actions) ------------------------------------- */
+.statusControl {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.statusBtn {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 5px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.statusBtn:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.statusBtn:disabled {
+  cursor: default;
+}
+.statusBtnActive {
+  background: var(--ink);
+  color: var(--sand);
+  border-color: var(--ink);
+}
+.statusError {
+  font-size: 11px;
+  color: var(--red-ink);
+}
+
 @media (max-width: 640px) {
   .shell {
     padding: 16px 14px 32px;
@@ -561,5 +790,14 @@
   }
   .tracePanel {
     max-width: 100%;
+  }
+  .flagForm {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .flagSelect,
+  .flagInput {
+    min-width: 0;
+    width: 100%;
   }
 }

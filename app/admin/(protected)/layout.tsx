@@ -38,6 +38,12 @@ export default async function ProtectedAdminLayout({
             <Link href="/admin/conversations" className={styles.navLink}>
               Conversations
             </Link>
+            <Link href="/admin/queue" className={styles.navLink}>
+              Queue
+            </Link>
+            <Link href="/admin/gaps" className={styles.navLink}>
+              Gaps
+            </Link>
             <LogoutButton />
           </nav>
         </header>

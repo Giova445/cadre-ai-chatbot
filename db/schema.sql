@@ -129,3 +129,19 @@ alter table conversations    enable row level security;
 alter table messages         enable row level security;
 alter table retrieval_traces enable row level security;
 alter table retrieval_chunks enable row level security;
+
+-- Phase 4: bad-answer flags (review queue). Applied via MCP migration
+-- cadre_answer_flags. No users table (single-admin gate) → no reviewer_id.
+create table if not exists answer_flags (
+  id          uuid primary key default gen_random_uuid(),
+  client_id   text not null default 'default',
+  message_id  uuid not null references messages(id) on delete cascade,
+  category    text not null,  -- hallucination|wrong_source|missed_escalation|tone|incomplete|other
+  note        text not null default '',
+  status      text not null default 'open',  -- open|triaged|resolved|wontfix
+  created_at  timestamptz not null default now(),
+  resolved_at timestamptz
+);
+create index if not exists answer_flags_status_idx  on answer_flags (status, created_at desc);
+create index if not exists answer_flags_message_idx on answer_flags (message_id);
+alter table answer_flags enable row level security;
