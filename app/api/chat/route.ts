@@ -7,14 +7,16 @@
 import { z } from "zod";
 import { after } from "next/server";
 import { getChatModel, hasChatModel, streamText } from "@/lib/llm";
-import { retrieveText, EFFECTIVE_THRESHOLD, getKB } from "@/lib/kb";
+import { retrieveTextWithUsage, EFFECTIVE_THRESHOLD, getKB } from "@/lib/kb";
 import { decide } from "@/lib/guardrail";
 import { buildSystem, buildConversation } from "@/lib/prompt";
 import { groundedStub, responseForDecision } from "@/lib/responses";
 import { corsHeaders, isOriginAllowed } from "@/lib/cors";
 import { rateLimit } from "@/lib/ratelimit";
 import { logTurn } from "@/lib/trace";
-import { RETRIEVAL_BACKEND, EMBED_MODEL } from "@/lib/config";
+import { RETRIEVAL_BACKEND, EMBED_MODEL, CHAT_MODEL } from "@/lib/config";
+import { recordUsage } from "@/lib/usage/record";
+import { checkBudget } from "@/lib/usage/budget";
 import { resolveClient } from "@/lib/clients";
 import { SID_COOKIE } from "@/lib/admin/contracts";
 import type { Decision } from "@/lib/guardrail";
@@ -153,9 +155,48 @@ export async function POST(req: Request) {
   const sid = parsed.sessionId ?? cookie.sid;
   const setCookie = parsed.sessionId ? undefined : cookie.setCookie;
 
-  let results;
+  // Pre-request budget gate (best-effort, fail-open). Runs BEFORE retrieval so
+  // an over-limit client incurs ZERO further token cost — no embedding, no model
+  // call. A block degrades to the existing escalation path (just another reason),
+  // never an error. Any throw here is swallowed => treated as "not blocked".
+  const budget = await checkBudget(clientId).catch(() => null);
+  if (budget?.blocked) {
+    const blockDecision: Decision = {
+      mode: "escalate",
+      reason: "weak_retrieval",
+      citations: [],
+      topScore: 0,
+      coverage: 0,
+    };
+    const blockText = responseForDecision(blockDecision);
+    scheduleTurnLog({ sid, clientId, query, assistantMessage: blockText, decision: blockDecision, results: [] });
+    return streamed(
+      blockText,
+      { mode: "escalate", reason: "budget_exceeded", sources: [], topScore: 0 },
+      cors,
+      setCookie,
+    );
+  }
+
+  let results: Retrieved[];
   try {
-    results = await retrieveText(query);
+    const retrieval = await retrieveTextWithUsage(query);
+    results = retrieval.results;
+    // Meter the query embedding (best-effort, post-flush). Only the real path
+    // spends tokens; the offline lexical embedder reports 0 and is skipped.
+    if (retrieval.embedTokens > 0 || retrieval.provider === "openai") {
+      after(() =>
+        recordUsage({
+          clientId,
+          conversationId: sid,
+          kind: "embedding",
+          operation: "query",
+          provider: retrieval.provider,
+          model: EMBED_MODEL,
+          inputTokens: retrieval.embedTokens,
+        }).catch(() => {}),
+      );
+    }
   } catch (err) {
     // Retrieval/embeddings failure -> escalate gracefully, never 500 with a leak.
     // Log it: a real artifact + a runtime key that can't embed silently turns
@@ -213,6 +254,29 @@ export async function POST(req: Request) {
       // Provider/network errors surface here (the textStream swallows them), so
       // this is the reliable operational signal for mid-stream failures.
       onError: ({ error }) => console.error("[chat] stream error:", error),
+      // Capture chat token usage. `onFinish` fires when the stream drains, even
+      // though the route consumes `textStream` manually — capture is independent
+      // of byte delivery. Best-effort: the write is deferred to `after()` and any
+      // throw is swallowed so a metering failure can never surface to the user.
+      onFinish: ({ usage }) => {
+        try {
+          after(() =>
+            recordUsage({
+              clientId,
+              conversationId: sid,
+              kind: "chat",
+              operation: "query",
+              provider: "openai",
+              model: CHAT_MODEL,
+              inputTokens: usage.inputTokens ?? 0,
+              outputTokens: usage.outputTokens ?? 0,
+              cachedInputTokens: usage.inputTokenDetails?.cacheReadTokens ?? 0,
+            }).catch(() => {}),
+          );
+        } catch {
+          // never let metering surface to the user
+        }
+      },
     });
     let resolveText!: (full: string) => void;
     const assistantText = new Promise<string>((resolve) => {

@@ -144,6 +144,45 @@ export async function embedQueryReal(text: string): Promise<number[]> {
   return embeddings[0];
 }
 
+/**
+ * Like {@link embedQueryReal}, but also returns the provider-reported token
+ * usage (`embedMany` exposes `usage.tokens` synchronously). Used by the usage/
+ * cost instrumentation so a query embedding can be metered. Embeddings are
+ * billed on input tokens only, so a single `tokens` count is the whole story.
+ */
+export async function embedQueryRealWithUsage(
+  text: string,
+): Promise<{ vector: number[]; tokens: number }> {
+  const provider = realEmbeddingProvider();
+  const { embeddings, usage } = await embedMany({
+    model: provider.embedding(EMBED_MODEL),
+    values: [text],
+    providerOptions: { openai: { dimensions: EMBED_DIMENSIONS } },
+  });
+  return { vector: embeddings[0], tokens: usage?.tokens ?? 0 };
+}
+
+/**
+ * Like {@link embedBatch}, but also returns the summed token usage across the
+ * batch (real path only; the offline lexical path reports 0 tokens — it spends
+ * nothing). Used by the ingest script to meter build-time embedding cost.
+ */
+export async function embedBatchWithUsage(
+  texts: string[],
+  idf?: Record<string, number>,
+): Promise<{ vectors: number[][]; tokens: number }> {
+  if (!USING_REAL_EMBEDDINGS) {
+    return { vectors: texts.map((t) => lexicalEmbed(t, idf)), tokens: 0 };
+  }
+  const provider = realEmbeddingProvider();
+  const { embeddings, usage } = await embedMany({
+    model: provider.embedding(EMBED_MODEL),
+    values: texts,
+    providerOptions: { openai: { dimensions: EMBED_DIMENSIONS } },
+  });
+  return { vectors: embeddings, tokens: usage?.tokens ?? 0 };
+}
+
 export function activeEmbeddingModel(): string {
   return USING_REAL_EMBEDDINGS ? EMBED_MODEL : "lexical-hash-512";
 }

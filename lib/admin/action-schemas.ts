@@ -53,3 +53,18 @@ export const reorderStartersSchema = z.object({
 export const deleteStarterSchema = z.object({
   id: z.string().uuid(),
 });
+
+// ---------------------------------------------------------------------------
+// Usage & Cost — budget editor (lib/usage/budget-actions.ts). `clientId` is ""
+// for the "global" scope (mirrors lib/usage/types.ts Budget.clientId); the
+// server action still enforces requireAdmin() before this ever reaches
+// usageRepo.setBudget. Ceiling stored as whole USD in the form (converted to
+// nano-USD at the repo boundary, matching Budget.monthlyCeilingNanoUsd).
+// ---------------------------------------------------------------------------
+export const setBudgetSchema = z.object({
+  scope: z.enum(["global", "client"]),
+  clientId: z.string().max(64).default(""),
+  monthlyCeilingUsd: z.number().min(0),
+  warnPct: z.number().int().min(0).max(100),
+  softBlock: z.boolean(),
+});

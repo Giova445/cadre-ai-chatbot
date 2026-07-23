@@ -6,7 +6,7 @@
 import type { EmbeddingsFile, Retrieved } from "./types";
 import { rankChunks } from "./retrieval";
 import { TOP_K, LEXICAL_MODEL, HAS_CHAT_KEY, RETRIEVAL_BACKEND } from "./config";
-import { lexicalEmbed, embedQueryReal } from "./llm";
+import { lexicalEmbed, embedQueryReal, embedQueryRealWithUsage } from "./llm";
 import embeddingsJson from "@/data/embeddings.json";
 
 const KB = embeddingsJson as unknown as EmbeddingsFile;
@@ -65,4 +65,49 @@ export async function retrieveText(
     ? lexicalEmbed(query, KB.idf)
     : await embedQueryReal(query);
   return rankChunks(KB, vec, k);
+}
+
+/**
+ * Usage-aware sibling of {@link retrieveText}: identical retrieval behaviour,
+ * but also reports the query-embedding token cost and the embedder provider so
+ * the route can meter it. `retrieveText` itself is left UNCHANGED — the eval
+ * runner depends on its exact signature.
+ *
+ * - real-embeddings path (pgvector, or a real-embeddings bundle) captures
+ *   `usage.tokens` via {@link embedQueryRealWithUsage} and reports
+ *   `provider: "openai"`.
+ * - offline lexical path spends nothing: `embedTokens: 0`, `provider: "lexical"`.
+ */
+export async function retrieveTextWithUsage(
+  query: string,
+  k: number = TOP_K,
+): Promise<{
+  results: Retrieved[];
+  embedTokens: number;
+  provider: "openai" | "lexical";
+}> {
+  if (RETRIEVAL_BACKEND === "pgvector") {
+    const { vector, tokens } = await embedQueryRealWithUsage(query);
+    const { retrievePgvector } = await import("./retrieval-pgvector");
+    return {
+      results: await retrievePgvector(vector, k),
+      embedTokens: tokens,
+      provider: "openai",
+    };
+  }
+
+  if (KB_IS_LEXICAL) {
+    return {
+      results: rankChunks(KB, lexicalEmbed(query, KB.idf), k),
+      embedTokens: 0,
+      provider: "lexical",
+    };
+  }
+
+  const { vector, tokens } = await embedQueryRealWithUsage(query);
+  return {
+    results: rankChunks(KB, vector, k),
+    embedTokens: tokens,
+    provider: "openai",
+  };
 }

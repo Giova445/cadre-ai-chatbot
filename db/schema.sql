@@ -165,3 +165,37 @@ create table if not exists starter_questions (
 );
 create index if not exists starter_questions_client_idx on starter_questions (client_id, position);
 alter table starter_questions enable row level security;
+
+-- Usage & cost tracking (applied via MCP migration cadre_usage_tracking). One row
+-- per billable model call; content-free (tokens + cost only). Integer nano-USD.
+create table if not exists usage_events (
+  id                  uuid primary key default gen_random_uuid(),
+  ts                  timestamptz not null default now(),
+  client_id           text not null default 'default',
+  conversation_id     text,
+  kind                text not null,            -- 'chat' | 'embedding'
+  operation           text not null default 'query', -- 'query' | 'ingest'
+  provider            text not null default 'openai',
+  model               text not null,
+  input_tokens        int  not null default 0,
+  output_tokens       int  not null default 0,
+  cached_input_tokens int  not null default 0,
+  cost_nano_usd       bigint not null default 0,
+  cost_source         text not null default 'table_estimated',
+  created_at          timestamptz not null default now()
+);
+create index if not exists usage_events_client_ts_idx  on usage_events (client_id, ts desc);
+create index if not exists usage_events_conv_idx        on usage_events (conversation_id);
+create index if not exists usage_events_client_kind_idx on usage_events (client_id, kind, ts desc);
+alter table usage_events enable row level security;
+
+create table if not exists usage_budgets (
+  scope                    text not null,        -- 'global' | 'client'
+  client_id                text not null default '',
+  monthly_ceiling_nano_usd bigint not null default 0,
+  warn_pct                 int  not null default 80,
+  soft_block               boolean not null default false,
+  updated_at               timestamptz not null default now(),
+  primary key (scope, client_id)
+);
+alter table usage_budgets enable row level security;

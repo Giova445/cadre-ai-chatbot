@@ -13,8 +13,9 @@ import path from "node:path";
 import matter from "gray-matter";
 import postgres from "postgres";
 import { chunkMarkdown } from "../lib/chunk";
-import { embedBatch, activeEmbeddingModel } from "../lib/llm";
-import { EMBED_DIMENSIONS, USING_REAL_EMBEDDINGS } from "../lib/config";
+import { embedBatchWithUsage, activeEmbeddingModel } from "../lib/llm";
+import { EMBED_DIMENSIONS, EMBED_MODEL, USING_REAL_EMBEDDINGS } from "../lib/config";
+import { recordUsage } from "../lib/usage/record";
 import type { Chunk } from "../lib/types";
 
 const ROOT = process.cwd();
@@ -76,7 +77,23 @@ async function main() {
   try {
     for (const [source, group] of bySource) {
       const texts = group.chunks.map((c) => c.text);
-      const vectors = await embedBatch(texts); // real embeddings (idf unused)
+      // real embeddings (idf unused); capture token usage to meter build-time cost.
+      const { vectors, tokens } = await embedBatchWithUsage(texts);
+      // Best-effort: attribute build-time embedding spend to the ingest client.
+      // A metering failure must never fail the ingest.
+      if (tokens > 0) {
+        await recordUsage({
+          clientId: CLIENT_ID,
+          conversationId: null,
+          kind: "embedding",
+          operation: "ingest",
+          provider: "openai",
+          model: EMBED_MODEL,
+          inputTokens: tokens,
+        }).catch((err) => {
+          console.error(`[ingest] usage record failed for ${source}:`, err);
+        });
+      }
       for (const v of vectors) {
         if (v.length !== EMBED_DIMENSIONS) {
           throw new Error(`embedding dim ${v.length} != ${EMBED_DIMENSIONS} for ${source}`);

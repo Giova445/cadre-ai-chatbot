@@ -65,6 +65,9 @@ export default async function ProtectedAdminLayout({
             <Link href="/admin/gaps" className={styles.navLink}>
               Gaps
             </Link>
+            <Link href="/admin/usage" className={styles.navLink}>
+              Usage
+            </Link>
             {showSelector && <ClientSelector clients={clients} />}
             <LogoutButton />
           </nav>

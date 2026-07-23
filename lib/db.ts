@@ -24,7 +24,11 @@ export function getDb(): Sql {
   }
   client = postgres(url, {
     prepare: false, // required for Supabase transaction-mode pooler (PgBouncer)
-    max: Number(process.env.DB_POOL_MAX ?? "1"),
+    // A small pool (not 1): admin pages fan out parallel reads (Promise.all) that
+    // would otherwise serialize/starve on a single connection while chat after()/
+    // logTurn transactions share it. The Supabase transaction pooler multiplexes
+    // these down to few real DB connections, so a handful per instance is safe.
+    max: Number(process.env.DB_POOL_MAX ?? "5"),
     idle_timeout: 20, // seconds; close idle conns so instances don't hoard the pool
   });
   return client;
