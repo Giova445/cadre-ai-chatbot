@@ -32,9 +32,11 @@ export type Decision = {
 };
 
 // Pricing intent. Deliberately targets clear pricing words; "budget"/"afford"
-// were dropped to avoid over-refusing legitimate finance/ROI questions.
+// and a bare "$" were dropped — a lone dollar sign matches legitimate finance/
+// ROI/lead questions ("we spend $10k/month on ads, can you help?"), which are
+// exactly the high-value conversations to answer/escalate, not deflect.
 const PRICING_RE =
-  /\b(pric(e|ing|es)?|cost(s)?|how much|quote|fee(s)?|charge(s)?|rate(s)?|retainer|dollar|expensive|cheap)\b|\$/i;
+  /\b(pric(e|ing|es)?|cost(s)?|how much|quote|fee(s)?|charge(s)?|rate(s)?|retainer|dollar|expensive|cheap)\b/i;
 
 // Explicit request for a person. The human object is required so "speak to our
 // CRM" or "connect to your API" don't trip the human-handoff path.

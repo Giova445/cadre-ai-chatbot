@@ -103,12 +103,14 @@ export async function POST(req: Request) {
   }
 
   const messages = parsed.messages;
-  const lastUser = [...messages].reverse().find((m) => m.role === "user");
-  if (!lastUser) {
+  const lastUserIdx = messages.map((m) => m.role).lastIndexOf("user");
+  if (lastUserIdx === -1) {
     return new Response("No user message.", { status: 400, headers: cors });
   }
-  const query = lastUser.content;
-  const history: HistoryMessage[] = messages.slice(0, -1).map((m) => ({
+  const query = messages[lastUserIdx].content;
+  // History = everything before the current user turn, so a trailing assistant
+  // turn isn't answered as the query and the query isn't duplicated into context.
+  const history: HistoryMessage[] = messages.slice(0, lastUserIdx).map((m) => ({
     role: m.role,
     content: m.content,
   }));
@@ -116,8 +118,11 @@ export async function POST(req: Request) {
   let results;
   try {
     results = await retrieveText(query);
-  } catch {
+  } catch (err) {
     // Retrieval/embeddings failure -> escalate gracefully, never 500 with a leak.
+    // Log it: a real artifact + a runtime key that can't embed silently turns
+    // every query into an escalation, so this is the only misconfig signal.
+    console.error("[chat] retrieval/embedding failed:", err);
     return streamed(
       responseForDecision({
         mode: "escalate",
@@ -165,8 +170,11 @@ export async function POST(req: Request) {
     return new Response(iterableStream(result.textStream, groundedStub(results)), {
       headers: metaHeaders(meta, cors),
     });
-  } catch {
-    // Model failure -> still return grounded context we already retrieved.
+  } catch (err) {
+    // Synchronous streamText failure -> still return grounded context. (Note:
+    // provider errors surface during stream iteration, not here — see the
+    // iterableStream fallback. Tracked follow-up: surface mid-stream failures.)
+    console.error("[chat] chat model failed:", err);
     return streamed(
       groundedStub(results),
       { ...meta, reason: "grounded_fallback" },

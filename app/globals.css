@@ -18,7 +18,7 @@
   --ink: #0c0407; /* near-black: buttons, dark surfaces */
   --text: #262321; /* primary text */
   --text-muted: #6a655e; /* secondary text */
-  --text-subtle: #9a948a; /* tertiary text */
+  --text-subtle: #767065; /* tertiary text (WCAG AA 4.66:1 on --sand) */
 
   /* lines (warm hairlines) */
   --line: #e9e4d8;
