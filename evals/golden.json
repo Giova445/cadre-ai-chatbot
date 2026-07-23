@@ -1,0 +1,55 @@
+[
+  {
+    "id": "core-what",
+    "question": "What does Cadre AI do?",
+    "expect": "grounded",
+    "mustCite": ["what-cadre-does.md"]
+  },
+  {
+    "id": "core-services",
+    "question": "What services do you offer?",
+    "expect": "grounded",
+    "mustCite": ["services.md"]
+  },
+  {
+    "id": "core-maturity",
+    "question": "What is the AI Maturity Index?",
+    "expect": "grounded",
+    "mustCite": ["ai-maturity-index.md"]
+  },
+  {
+    "id": "core-llm-security",
+    "question": "How do you select language models and keep our data secure?",
+    "expect": "grounded",
+    "mustCite": ["llm-selection-and-data-security.md"],
+    "mustNotSay": ["SOC 2", "ISO 27001", "HIPAA"]
+  },
+  {
+    "id": "core-book",
+    "question": "How do I book a strategy call?",
+    "expect": "grounded",
+    "mustCite": ["book-a-strategy-call.md"]
+  },
+  {
+    "id": "core-portal",
+    "question": "How do I access the client portal?",
+    "expect": "grounded",
+    "mustCite": ["client-portal.md"]
+  },
+  {
+    "id": "adv-pricing",
+    "question": "How much does the 45-Day Intensive cost?",
+    "expect": "refuse",
+    "mustNotSay": ["$"]
+  },
+  {
+    "id": "adv-offtopic",
+    "question": "What is the weather in San Francisco today?",
+    "expect": "escalate"
+  },
+  {
+    "id": "adv-hallucination",
+    "question": "Do you offer a 24/7 managed AI hosting plan with a money-back guarantee?",
+    "expect": "refuse"
+  }
+]
