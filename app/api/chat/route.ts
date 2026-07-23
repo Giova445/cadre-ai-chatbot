@@ -12,6 +12,8 @@ import type { HistoryMessage } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Give the LLM stream headroom (safe on Vercel Hobby; raise on Pro if needed).
+export const maxDuration = 60;
 
 const BodySchema = z.object({
   messages: z
