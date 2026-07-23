@@ -29,12 +29,36 @@ const STOPWORDS = new Set([
   "that", "this", "it", "as", "at", "by", "be", "can", "i", "my", "me",
 ]);
 
-export function tokenize(text: string): string[] {
+function rawTokens(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((t) => t.length > 1 && !STOPWORDS.has(t));
+    .filter((t) => t.length > 1);
+}
+
+export function tokenize(text: string): string[] {
+  const raw = rawTokens(text);
+  const content = raw.filter((t) => !STOPWORDS.has(t));
+  // Keep function words for very short/vague queries so they don't collapse to
+  // an all-zero vector (e.g. "what do you do" -> nothing to match).
+  return content.length >= 2 ? content : raw;
+}
+
+// Default IDF weight for query terms not seen in the corpus (mild, so unknown
+// words don't dominate the query vector).
+const DEFAULT_IDF = 1;
+
+/** Inverse document frequency over a corpus: distinctive terms weigh more. */
+export function computeIdf(texts: string[]): Record<string, number> {
+  const df: Record<string, number> = {};
+  for (const t of texts) {
+    for (const tok of new Set(tokenize(t))) df[tok] = (df[tok] ?? 0) + 1;
+  }
+  const N = texts.length;
+  const idf: Record<string, number> = {};
+  for (const tok in df) idf[tok] = Math.log((N + 1) / (df[tok] + 1)) + 1;
+  return idf;
 }
 
 // FNV-1a 32-bit hash — small, fast, deterministic.
@@ -47,14 +71,17 @@ function fnv1a(str: string): number {
   return h >>> 0;
 }
 
-export function lexicalEmbed(text: string): number[] {
+export function lexicalEmbed(
+  text: string,
+  idf?: Record<string, number>,
+): number[] {
   const vec = new Array<number>(EMBED_DIMENSIONS).fill(0);
-  const tokens = tokenize(text);
-  for (const tok of tokens) {
+  for (const tok of tokenize(text)) {
     const h = fnv1a(tok);
     const idx = h % EMBED_DIMENSIONS;
     const sign = (h >>> 16) & 1 ? 1 : -1; // signed hashing reduces collisions
-    vec[idx] += sign;
+    const weight = idf ? (idf[tok] ?? DEFAULT_IDF) : 1; // IDF: rare terms dominate
+    vec[idx] += sign * weight;
   }
   let norm = 0;
   for (const v of vec) norm += v * v;
@@ -68,14 +95,22 @@ export function lexicalEmbed(text: string): number[] {
 
 function realEmbeddingProvider() {
   return createOpenAI({
-    apiKey: process.env.EMBEDDINGS_API_KEY,
-    baseURL: process.env.EMBEDDINGS_BASE_URL || undefined,
+    // Embeddings key, falling back to the chat key (same OpenAI-compatible key
+    // can serve both), so real embeddings work whenever any key is present.
+    apiKey: process.env.EMBEDDINGS_API_KEY || process.env.AI_CHAT_API_KEY,
+    baseURL:
+      process.env.EMBEDDINGS_BASE_URL ||
+      process.env.AI_CHAT_BASE_URL ||
+      undefined,
   });
 }
 
-/** Embed many texts (build-time and batch use). */
-export async function embedBatch(texts: string[]): Promise<number[][]> {
-  if (!USING_REAL_EMBEDDINGS) return texts.map(lexicalEmbed);
+/** Embed many texts (build-time and batch use). `idf` weights the lexical path. */
+export async function embedBatch(
+  texts: string[],
+  idf?: Record<string, number>,
+): Promise<number[][]> {
+  if (!USING_REAL_EMBEDDINGS) return texts.map((t) => lexicalEmbed(t, idf));
   const provider = realEmbeddingProvider();
   const { embeddings } = await embedMany({
     model: provider.embedding(EMBED_MODEL),
@@ -85,10 +120,28 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
   return embeddings;
 }
 
-/** Embed a single query (runtime use). */
-export async function embedQuery(text: string): Promise<number[]> {
-  const [vec] = await embedBatch([text]);
+/** Embed a single query (runtime use). `idf` (from the artifact) weights lexical. */
+export async function embedQuery(
+  text: string,
+  idf?: Record<string, number>,
+): Promise<number[]> {
+  const [vec] = await embedBatch([text], idf);
   return vec;
+}
+
+/**
+ * Force a REAL (OpenAI-compatible) query embedding regardless of env flags.
+ * Used when the artifact was built with real embeddings, so the query embedder
+ * always matches the chunk embedder (never lexical-vs-real mismatch).
+ */
+export async function embedQueryReal(text: string): Promise<number[]> {
+  const provider = realEmbeddingProvider();
+  const { embeddings } = await embedMany({
+    model: provider.embedding(EMBED_MODEL),
+    values: [text],
+    providerOptions: { openai: { dimensions: EMBED_DIMENSIONS } },
+  });
+  return embeddings[0];
 }
 
 export function activeEmbeddingModel(): string {

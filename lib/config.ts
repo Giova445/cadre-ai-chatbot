@@ -3,7 +3,7 @@
 export const EMBED_MODEL = "text-embedding-3-small";
 export const LEXICAL_MODEL = "lexical-hash-512";
 export const EMBED_DIMENSIONS = 512;
-export const TOP_K = 4;
+export const TOP_K = 6;
 
 // True when a real OpenAI-compatible embeddings key is present; otherwise the
 // deterministic offline lexical embedder is used (build + runtime stay in sync).
@@ -14,8 +14,16 @@ export const HAS_CHAT_KEY = Boolean(process.env.AI_CHAT_API_KEY);
 // weak to ground" and the request escalates instead of guessing. Real OpenAI
 // embeddings sit around ~0.35; the offline lexical embedder scales lower, so the
 // default is mode-aware. An explicit env var always wins.
+// Mode-aware:
+//  - real embeddings: 0.35 (semantic scores are well-separated).
+//  - lexical + chat model present: 0.05 — let vague-but-legit queries reach the
+//    LLM, which grounds/answers legit ones and declines off-topic via its scope
+//    rule (lexical scores can't separate "what do you do" from "weather?").
+//  - lexical + no chat model (offline eval/demo): 0.20 — reject off-topic
+//    deterministically since there is no LLM to arbitrate.
 export const RETRIEVAL_THRESHOLD = Number(
-  process.env.RETRIEVAL_THRESHOLD ?? (USING_REAL_EMBEDDINGS ? "0.35" : "0.08"),
+  process.env.RETRIEVAL_THRESHOLD ??
+    (USING_REAL_EMBEDDINGS ? "0.35" : HAS_CHAT_KEY ? "0.05" : "0.20"),
 );
 
 // Chat model id (locked when the key arrives).

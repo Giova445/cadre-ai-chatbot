@@ -20,6 +20,7 @@ export type EmbeddingsFile = {
   dimensions: number; // 512
   builtAt: string; // ISO timestamp
   thresholdHint: number; // calibrated cosine cutoff suggestion for this embedder
+  idf: Record<string, number>; // IDF weights (lexical embedder); {} for real embeddings
   chunks: Chunk[];
 };
 

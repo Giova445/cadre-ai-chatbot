@@ -11,8 +11,7 @@
 
 import golden from "./golden.json";
 import type { GoldenCase } from "../lib/types";
-import { embedQuery } from "../lib/llm";
-import { retrieve } from "../lib/kb";
+import { retrieveText, EFFECTIVE_THRESHOLD } from "../lib/kb";
 import { decide } from "../lib/guardrail";
 import { groundedStub, responseForDecision } from "../lib/responses";
 
@@ -32,9 +31,8 @@ function includesCI(haystack: string, needle: string): boolean {
 }
 
 async function runCase(c: GoldenCase): Promise<Row> {
-  const vec = await embedQuery(c.question);
-  const results = retrieve(vec);
-  const decision = decide(c.question, results);
+  const results = await retrieveText(c.question);
+  const decision = decide(c.question, results, EFFECTIVE_THRESHOLD);
   const output =
     decision.mode === "answer"
       ? groundedStub(results)

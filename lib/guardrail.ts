@@ -53,6 +53,12 @@ const UBIQUITOUS = new Set([
 // confirm something the docs don't actually mention.
 const COVERAGE_MIN = 0.4;
 
+// Sources are listed (for the retrieval trace) whenever a chunk clears this low
+// relevance floor. This is INDEPENDENT of RETRIEVAL_THRESHOLD (which only gates
+// answer-vs-escalate), so the cited-sources trace reflects real retrieved
+// context even when the answer threshold is high (offline mode).
+const CITATION_FLOOR = 0.05;
+
 function coverage(query: string, results: Retrieved[]): number {
   const terms = [...new Set(tokenize(query))].filter((t) => !UBIQUITOUS.has(t));
   if (terms.length === 0) return 1;
@@ -63,13 +69,17 @@ function coverage(query: string, results: Retrieved[]): number {
   return found / terms.length;
 }
 
-export function decide(query: string, results: Retrieved[]): Decision {
+export function decide(
+  query: string,
+  results: Retrieved[],
+  threshold: number = RETRIEVAL_THRESHOLD,
+): Decision {
   const topScore = results[0]?.score ?? 0;
   const cov = coverage(query, results);
   const citations = [
     ...new Set(
       results
-        .filter((r) => r.score >= RETRIEVAL_THRESHOLD)
+        .filter((r) => r.score >= CITATION_FLOOR)
         .map((r) => r.chunk.meta.source),
     ),
   ];
@@ -80,7 +90,7 @@ export function decide(query: string, results: Retrieved[]): Decision {
   if (HUMAN_RE.test(query)) {
     return { mode: "escalate", reason: "human_request", citations, topScore, coverage: cov };
   }
-  if (isWeak(results)) {
+  if (isWeak(results, threshold)) {
     return { mode: "escalate", reason: "weak_retrieval", citations: [], topScore, coverage: cov };
   }
   // Grounding-coverage guard (OFFLINE ONLY). With no chat model, retrieval is

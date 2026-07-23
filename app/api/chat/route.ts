@@ -3,8 +3,8 @@
 // online (streamed LLM answer). Guardrail/escalation metadata rides in headers.
 
 import { z } from "zod";
-import { embedQuery, getChatModel, hasChatModel, streamText } from "@/lib/llm";
-import { retrieve } from "@/lib/kb";
+import { getChatModel, hasChatModel, streamText } from "@/lib/llm";
+import { retrieveText, EFFECTIVE_THRESHOLD } from "@/lib/kb";
 import { decide } from "@/lib/guardrail";
 import { buildSystem, buildConversation } from "@/lib/prompt";
 import { groundedStub, responseForDecision } from "@/lib/responses";
@@ -77,11 +77,11 @@ export async function POST(req: Request) {
     content: m.content,
   }));
 
-  let queryVec: number[];
+  let results;
   try {
-    queryVec = await embedQuery(query);
+    results = await retrieveText(query);
   } catch {
-    // Embeddings failure -> escalate gracefully, never 500 with a leak.
+    // Retrieval/embeddings failure -> escalate gracefully, never 500 with a leak.
     return streamed(
       responseForDecision({
         mode: "escalate",
@@ -93,9 +93,7 @@ export async function POST(req: Request) {
       { mode: "escalate", reason: "embed_error", sources: [], topScore: 0 },
     );
   }
-
-  const results = retrieve(queryVec);
-  const decision = decide(query, results);
+  const decision = decide(query, results, EFFECTIVE_THRESHOLD);
   const meta = {
     mode: decision.mode,
     reason: decision.reason,

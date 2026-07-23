@@ -7,7 +7,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import { chunkMarkdown } from "../lib/chunk";
-import { embedBatch, activeEmbeddingModel } from "../lib/llm";
+import { embedBatch, activeEmbeddingModel, computeIdf } from "../lib/llm";
 import { EMBED_DIMENSIONS, USING_REAL_EMBEDDINGS } from "../lib/config";
 import type { Chunk, EmbeddingsFile } from "../lib/types";
 
@@ -56,7 +56,11 @@ async function main() {
     `[embed] ${files.length} docs -> ${pending.length} chunks; embedder=${activeEmbeddingModel()} (real=${USING_REAL_EMBEDDINGS})`,
   );
 
-  const vectors = await embedBatch(pending.map((p) => p.text));
+  // IDF over the chunk corpus (used by the lexical embedder so distinctive
+  // terms dominate; ignored by the real-embeddings path).
+  const idf = USING_REAL_EMBEDDINGS ? {} : computeIdf(pending.map((p) => p.text));
+
+  const vectors = await embedBatch(pending.map((p) => p.text), idf);
   if (vectors.length !== pending.length) {
     throw new Error("embedding count mismatch");
   }
@@ -82,6 +86,7 @@ async function main() {
     dimensions: EMBED_DIMENSIONS,
     builtAt: new Date().toISOString(),
     thresholdHint,
+    idf,
     chunks,
   };
 
