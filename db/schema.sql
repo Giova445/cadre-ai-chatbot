@@ -67,3 +67,65 @@ create index if not exists kb_chunks_embedding_idx
 alter table documents   enable row level security;
 alter table ingest_jobs enable row level security;
 alter table kb_chunks   enable row level security;
+
+-- ===========================================================================
+-- Observability tables (admin dashboard, Phases 1-3). Applied via MCP migration
+-- cadre_observability_schema. Best-effort turn logging writes here (lib/trace.ts);
+-- the read-only admin dashboard reads it (lib/admin/repos.ts). Tenant-scoped.
+-- ===========================================================================
+create table if not exists conversations (
+  id            uuid primary key default gen_random_uuid(),
+  client_id     text not null default 'default',
+  session_id    text not null,
+  started_at    timestamptz not null default now(),
+  last_at       timestamptz not null default now(),
+  last_mode     text,
+  message_count int  not null default 0,
+  metadata      jsonb not null default '{}',
+  unique (client_id, session_id)
+);
+create index if not exists conversations_last_at_idx on conversations (last_at desc);
+
+create table if not exists messages (
+  id              uuid primary key default gen_random_uuid(),
+  conversation_id uuid not null references conversations(id) on delete cascade,
+  turn_index      int  not null,
+  role            text not null,           -- user | assistant
+  content         text not null,
+  created_at      timestamptz not null default now()
+);
+create index if not exists messages_conversation_idx on messages (conversation_id, turn_index);
+
+create table if not exists retrieval_traces (
+  id             uuid primary key default gen_random_uuid(),
+  message_id     uuid not null references messages(id) on delete cascade,
+  query_text     text not null,
+  mode           text not null,
+  reason         text not null,
+  top_score      double precision not null default 0,
+  coverage       double precision not null default 0,
+  threshold      double precision not null default 0,
+  embedder_model text not null default '',
+  backend        text not null default 'bundle',
+  created_at     timestamptz not null default now()
+);
+create index if not exists retrieval_traces_message_idx on retrieval_traces (message_id);
+
+create table if not exists retrieval_chunks (
+  id        uuid primary key default gen_random_uuid(),
+  trace_id  uuid not null references retrieval_traces(id) on delete cascade,
+  chunk_id  text not null,
+  source    text not null,
+  section   text not null default '',
+  title     text not null default '',
+  tags      text[] not null default '{}',
+  score     double precision not null,
+  rank      int not null,
+  cited     boolean not null default false
+);
+create index if not exists retrieval_chunks_trace_idx on retrieval_chunks (trace_id);
+
+alter table conversations    enable row level security;
+alter table messages         enable row level security;
+alter table retrieval_traces enable row level security;
+alter table retrieval_chunks enable row level security;

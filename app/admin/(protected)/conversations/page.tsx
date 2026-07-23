@@ -1,0 +1,99 @@
+import Link from "next/link";
+import { requireAdmin } from "@/lib/admin/auth";
+import { conversationRepo } from "@/lib/admin/repos";
+import type { DecisionMode } from "@/lib/admin/contracts";
+import { ConversationTable } from "../../_components/ConversationTable";
+import styles from "../../admin.module.css";
+
+const LIMIT = 20;
+
+const MODE_FILTERS: { value: DecisionMode | undefined; label: string }[] = [
+  { value: undefined, label: "All" },
+  { value: "answer", label: "Answer" },
+  { value: "refuse", label: "Refuse" },
+  { value: "escalate", label: "Escalate" },
+];
+
+function isDecisionMode(value: string | undefined): value is DecisionMode {
+  return value === "answer" || value === "refuse" || value === "escalate";
+}
+
+function hrefFor(page: number, mode: DecisionMode | undefined): string {
+  const params = new URLSearchParams();
+  if (page > 1) params.set("page", String(page));
+  if (mode) params.set("mode", mode);
+  const qs = params.toString();
+  return qs ? `/admin/conversations?${qs}` : "/admin/conversations";
+}
+
+export default async function ConversationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; mode?: string }>;
+}) {
+  await requireAdmin();
+  const sp = await searchParams;
+
+  const parsedPage = Number.parseInt(sp.page ?? "1", 10);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+  const mode = isDecisionMode(sp.mode) ? sp.mode : undefined;
+
+  const { rows, total } = await conversationRepo.list({ page, limit: LIMIT, mode });
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+
+  return (
+    <div className={styles.page}>
+      <div className={styles.pageHead}>
+        <h1 className={styles.pageTitle}>Conversations</h1>
+        <p className={styles.pageSub}>
+          {total} logged {total === 1 ? "conversation" : "conversations"}
+        </p>
+      </div>
+
+      <div className={styles.filterChips} role="group" aria-label="Filter by decision mode">
+        {MODE_FILTERS.map((filter) => {
+          const active = filter.value === mode;
+          return (
+            <Link
+              key={filter.label}
+              href={hrefFor(1, filter.value)}
+              className={`${styles.filterChip} ${active ? styles.filterChipActive : ""}`}
+              aria-current={active ? "true" : undefined}
+            >
+              {filter.label}
+            </Link>
+          );
+        })}
+      </div>
+
+      {rows.length === 0 ? (
+        <p className={styles.emptyState}>No conversations logged yet.</p>
+      ) : (
+        <>
+          <ConversationTable rows={rows} />
+          <nav className={styles.pagination} aria-label="Pagination">
+            <Link
+              href={hrefFor(Math.max(1, page - 1), mode)}
+              className={`${styles.pageLink} ${page <= 1 ? styles.pageLinkDisabled : ""}`}
+              aria-disabled={page <= 1}
+              tabIndex={page <= 1 ? -1 : undefined}
+            >
+              ← Prev
+            </Link>
+            <span className={styles.pageStatus}>
+              Page {page} of {totalPages}
+            </span>
+            <Link
+              href={hrefFor(Math.min(totalPages, page + 1), mode)}
+              className={`${styles.pageLink} ${page >= totalPages ? styles.pageLinkDisabled : ""}`}
+              aria-disabled={page >= totalPages}
+              tabIndex={page >= totalPages ? -1 : undefined}
+            >
+              Next →
+            </Link>
+          </nav>
+        </>
+      )}
+    </div>
+  );
+}

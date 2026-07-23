@@ -5,14 +5,19 @@
 // runaway cost is capped by a best-effort rate limiter.
 
 import { z } from "zod";
+import { after } from "next/server";
 import { getChatModel, hasChatModel, streamText } from "@/lib/llm";
-import { retrieveText, EFFECTIVE_THRESHOLD } from "@/lib/kb";
+import { retrieveText, EFFECTIVE_THRESHOLD, getKB } from "@/lib/kb";
 import { decide } from "@/lib/guardrail";
 import { buildSystem, buildConversation } from "@/lib/prompt";
 import { groundedStub, responseForDecision } from "@/lib/responses";
 import { corsHeaders, isOriginAllowed } from "@/lib/cors";
 import { rateLimit } from "@/lib/ratelimit";
-import type { HistoryMessage } from "@/lib/types";
+import { logTurn } from "@/lib/trace";
+import { RETRIEVAL_BACKEND, EMBED_MODEL } from "@/lib/config";
+import { SID_COOKIE } from "@/lib/admin/contracts";
+import type { Decision } from "@/lib/guardrail";
+import type { HistoryMessage, Retrieved } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,26 +49,40 @@ function encoderStream(text: string): ReadableStream<Uint8Array> {
 function iterableStream(
   iter: AsyncIterable<string>,
   fallback: string,
+  onComplete?: (full: string) => void,
 ): ReadableStream<Uint8Array> {
   const enc = new TextEncoder();
   return new ReadableStream({
     async start(controller) {
       let any = false;
+      let acc = "";
       try {
         for await (const delta of iter) {
           any = true;
+          acc += delta;
           controller.enqueue(enc.encode(delta));
         }
-        if (!any) controller.enqueue(enc.encode(fallback));
+        if (!any) {
+          acc = fallback;
+          controller.enqueue(enc.encode(fallback));
+        }
       } catch (err) {
         // Before any token: fall back to the grounded stub. After partial
         // output: don't garble it with the stub — mark it interrupted so the
         // user (and logs) know it's incomplete rather than silently truncated.
-        if (!any) controller.enqueue(enc.encode(fallback));
-        else controller.enqueue(enc.encode("\n\n_(response interrupted)_"));
+        if (!any) {
+          acc = fallback;
+          controller.enqueue(enc.encode(fallback));
+        } else {
+          const marker = "\n\n_(response interrupted)_";
+          acc += marker;
+          controller.enqueue(enc.encode(marker));
+        }
         console.error("[chat] stream error:", err);
       } finally {
         controller.close();
+        // Hand the fully-accumulated assistant text to the (best-effort) logger.
+        onComplete?.(acc);
       }
     },
   });
@@ -118,6 +137,10 @@ export async function POST(req: Request) {
     content: m.content,
   }));
 
+  // Group a visitor's turns into one conversation via a non-identifying,
+  // httpOnly session id (minted on the first turn). Powers the admin trace view.
+  const { sid, setCookie } = readOrCreateSid(req);
+
   let results;
   try {
     results = await retrieveText(query);
@@ -126,16 +149,20 @@ export async function POST(req: Request) {
     // Log it: a real artifact + a runtime key that can't embed silently turns
     // every query into an escalation, so this is the only misconfig signal.
     console.error("[chat] retrieval/embedding failed:", err);
+    const errDecision: Decision = {
+      mode: "escalate",
+      reason: "weak_retrieval",
+      citations: [],
+      topScore: 0,
+      coverage: 0,
+    };
+    const errText = responseForDecision(errDecision);
+    scheduleTurnLog({ sid, query, assistantMessage: errText, decision: errDecision, results: [] });
     return streamed(
-      responseForDecision({
-        mode: "escalate",
-        reason: "weak_retrieval",
-        citations: [],
-        topScore: 0,
-        coverage: 0,
-      }),
+      errText,
       { mode: "escalate", reason: "embed_error", sources: [], topScore: 0 },
       cors,
+      setCookie,
     );
   }
   const decision = decide(query, results, EFFECTIVE_THRESHOLD);
@@ -148,17 +175,17 @@ export async function POST(req: Request) {
 
   // Non-answer paths are deterministic text — no model needed.
   if (decision.mode !== "answer") {
-    return streamed(responseForDecision(decision), meta, cors);
+    const text = responseForDecision(decision);
+    scheduleTurnLog({ sid, query, assistantMessage: text, decision, results });
+    return streamed(text, meta, cors, setCookie);
   }
 
   // Answer path: real model when a key exists, else an offline grounded stub.
   const model = getChatModel();
   if (!hasChatModel() || !model) {
-    return streamed(
-      groundedStub(results),
-      { ...meta, reason: "grounded_offline" },
-      cors,
-    );
+    const text = groundedStub(results);
+    scheduleTurnLog({ sid, query, assistantMessage: text, decision, results });
+    return streamed(text, { ...meta, reason: "grounded_offline" }, cors, setCookie);
   }
 
   try {
@@ -175,26 +202,31 @@ export async function POST(req: Request) {
       // this is the reliable operational signal for mid-stream failures.
       onError: ({ error }) => console.error("[chat] stream error:", error),
     });
-    return new Response(iterableStream(result.textStream, groundedStub(results)), {
-      headers: metaHeaders(meta, cors),
+    let resolveText!: (full: string) => void;
+    const assistantText = new Promise<string>((resolve) => {
+      resolveText = resolve;
     });
+    const body = iterableStream(result.textStream, groundedStub(results), resolveText);
+    scheduleTurnLog({ sid, query, assistantMessage: assistantText, decision, results });
+    return new Response(body, { headers: metaHeaders(meta, cors, setCookie) });
   } catch (err) {
-    // Synchronous streamText failure -> still return grounded context. (Note:
-    // provider errors surface during stream iteration, not here — see the
-    // iterableStream fallback. Tracked follow-up: surface mid-stream failures.)
+    // Synchronous streamText failure -> still return grounded context. (Provider
+    // errors surface during stream iteration; see the iterableStream fallback.)
     console.error("[chat] chat model failed:", err);
-    return streamed(
-      groundedStub(results),
-      { ...meta, reason: "grounded_fallback" },
-      cors,
-    );
+    const text = groundedStub(results);
+    scheduleTurnLog({ sid, query, assistantMessage: text, decision, results });
+    return streamed(text, { ...meta, reason: "grounded_fallback" }, cors, setCookie);
   }
 }
 
 type Meta = { mode: string; reason: string; sources: string[]; topScore: number };
 
-function metaHeaders(meta: Meta, cors: Record<string, string>): HeadersInit {
-  return {
+function metaHeaders(
+  meta: Meta,
+  cors: Record<string, string>,
+  setCookie?: string,
+): HeadersInit {
+  const headers: Record<string, string> = {
     ...cors,
     "Content-Type": "text/plain; charset=utf-8",
     "Cache-Control": "no-store",
@@ -203,12 +235,58 @@ function metaHeaders(meta: Meta, cors: Record<string, string>): HeadersInit {
     "x-cadre-sources": JSON.stringify(meta.sources),
     "x-cadre-topscore": meta.topScore.toFixed(4),
   };
+  if (setCookie) headers["Set-Cookie"] = setCookie;
+  return headers;
 }
 
 function streamed(
   text: string,
   meta: Meta,
   cors: Record<string, string>,
+  setCookie?: string,
 ): Response {
-  return new Response(encoderStream(text), { headers: metaHeaders(meta, cors) });
+  return new Response(encoderStream(text), {
+    headers: metaHeaders(meta, cors, setCookie),
+  });
+}
+
+// The retrieval embedder recorded on every trace (pgvector always embeds queries
+// with the real model; the bundle backend follows its artifact).
+const TRACE_EMBEDDER =
+  RETRIEVAL_BACKEND === "pgvector" ? EMBED_MODEL : getKB().model;
+
+// Read the visitor's `cadre_sid` cookie, or mint one (returned as a Set-Cookie).
+function readOrCreateSid(req: Request): { sid: string; setCookie?: string } {
+  const raw = req.headers.get("cookie") ?? "";
+  const match = raw.match(new RegExp(`(?:^|;\\s*)${SID_COOKIE}=([^;]+)`));
+  if (match) return { sid: decodeURIComponent(match[1]) };
+  const sid = crypto.randomUUID();
+  const setCookie = `${SID_COOKIE}=${sid}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=31536000`;
+  return { sid, setCookie };
+}
+
+// Best-effort turn logging, scheduled AFTER the response flushes (never blocks
+// the stream). `assistantMessage` may be a promise — the LLM path resolves it
+// when the stream closes. logTurn itself swallows all errors.
+function scheduleTurnLog(args: {
+  sid: string;
+  query: string;
+  assistantMessage: string | Promise<string>;
+  decision: Decision;
+  results: Retrieved[];
+}): void {
+  after(async () => {
+    const assistantMessage = await args.assistantMessage;
+    await logTurn({
+      sessionId: args.sid,
+      userMessage: args.query,
+      assistantMessage,
+      query: args.query,
+      decision: args.decision,
+      results: args.results,
+      embedderModel: TRACE_EMBEDDER,
+      backend: RETRIEVAL_BACKEND,
+      threshold: EFFECTIVE_THRESHOLD,
+    });
+  });
 }
