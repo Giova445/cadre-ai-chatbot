@@ -508,5 +508,66 @@ budget-enforced, black-box-your-data" claim must be labeled advisory.
 - pgvector `halfvec` / HNSW at 512 dims (already cited in Pillars 2 & 4):
   [pgvector README](https://github.com/pgvector/pgvector),
   [Supabase HNSW docs](https://supabase.com/docs/guides/ai/vector-indexes/hnsw-indexes).
+
+---
+
+## Final Coverage Verdict (post-Pillar-6)
+
+A 6th pillar — [`shared-infra-and-tenancy.md`](./shared-infra-and-tenancy.md) — was written to close
+every R and G item above. This section re-scores each item against **one specific condition**:
+
+> **Is the item now COVERED BY A PLAN — i.e. does one of the six pillar docs give it a full
+> architecture description + a full implementation plan + an explicit owner?**
+
+This is a **planning-coverage** test, *not* a launch-readiness test. "Covered by a plan" is a
+different bar from "built and safe to run in production" — see the caveat after the table.
+
+| Item | Covered by plan+owner? | Where | Owner |
+|---|:--:|---|---|
+| **R1** Data layer (Postgres SoR, Redis→cache, Blob) | **Yes** | Pillar 6 §R1 (decision + diagram + impl plan) | SIP + P3 |
+| **R2** Doc mgmt designed once (canonical schema/flag/vector) | **Yes** | Pillar 6 §R2 (frozen table + impl plan) | SIP freezes / P4 owns / P2 consumes |
+| **R3** One conversation identity (body UUID, no cookie) | **Yes** | Pillar 6 §R3 | SIP decides / P1 + P2 consume |
+| **R4** Origin→clientId binding (kill forgeable tenant) | **Yes** | Pillar 6 §R4 (`resolveTenant` + registry) | TCR |
+| **R5** One migration tool + one config/env owner | **Yes** | Pillar 6 §R5 (frozen env manifest) | SIP |
+| **G1** Public-endpoint abuse controls live at launch | **Yes** | Pillar 6 §G1 (distributed limiter + lockdown) | P1 + SIP |
+| **G2** Enabled-by-default global daily spend cap | **Yes** | Pillar 6 §G2 | P3 + SIP |
+| **G3** Multi-tenancy (client_id + RLS + KB partition + registry) | **Yes** | Pillar 6 §G3 (3-layer arch + SQL) | TCR |
+| **G4** Secrets inventory + rotation + per-client keys | **Yes** | Pillar 6 §G4 | SIP (keys w/ TCR) |
+| **G5** Observability (Sentry + structured events + alerts) | **Yes** | Pillar 6 §G5 | SIP |
+| **G6** GDPR erasure + subprocessor/DPA + LLM no-retention pin | **Yes** | Pillar 6 §G6 (5 sub-items) | SIP + P2 |
+| **G7** Widget consent / cookie legality | **Yes** | Pillar 6 §G7 | P1 |
+| **G8** CI/CD + one migration + preview isolation (all stores) | **Yes** | Pillar 6 §G8 | SIP + P2 |
+| **G9** Input safety (moderation + injection logging) | **Yes** | Pillar 6 §G9 | P1 |
+| **G10** Health checks / SLA / uptime | **Yes** | Pillar 6 §G10 | SIP |
+| **G11** Backups / DR | **Yes** | Pillar 6 §G11 | SIP |
+
+**All 16 items (R1–R5, G1–G11) pass the planning-coverage test.** Each has, in Pillar 6, a genuine
+architecture description (not just a mention), a concrete implementation plan with named
+files/steps/tests, and a single explicit owner — with the two homeless cross-cutting workstreams
+(**Shared Infra / Platform** and **Tenancy / Client Registry**) formally stood up to absorb the six
+items no pillar naturally owned. Pillar 6 also unifies them into one target architecture, a phased
+rollout (A→E), and a coverage matrix.
+
+> **Explicit statement (the goal's condition):** *Nothing deployment-critical is left uncovered —
+> every G/R item now has a full implementation plan + architecture + owner across the six pillar
+> docs.*
+
+### The distinction that must stay clear: covered-by-plan ≠ ready-to-launch
+
+Planning coverage is complete. **Production readiness is not**, and that gap is a *build-and-provision
+phase*, not a planning gap. Specifically, per Pillar 6's own honest caveats:
+
+- **G1 is partially-implemented in a launch-unsafe default posture.** `lib/cors.ts` +
+  `lib/ratelimit.ts` ship today but default to allow-all `*` CORS and an in-memory per-instance
+  limiter (a fleet-wide no-op on serverless). The *plan* to fix this (lock `ALLOWED_ORIGINS`,
+  distributed Upstash limiter) is complete; the *code* is not. Until Phase B lands, the endpoint is
+  still trivially drainable — a launch blocker, but not a **planning** gap.
+- **G3, G4, G6, G8, G11 are `needs-infra`.** Their plans are complete but require provisioning
+  Neon / Upstash / Vercel Blob / Sentry before the planned code can run.
+- **Everything else is `planned`** — designed, owned, not yet built.
+
+So: **coverage-by-plan = 16/16 (met). Ready-to-launch = no** (Phase A only; abuse controls unsafe by
+default; multi-tenancy/persistence/compliance not yet built or provisioned). The remaining work is
+execution against these plans, which is exactly what Pillar 6's Phase A→E rollout sequences.
 </content>
 </invoke>
