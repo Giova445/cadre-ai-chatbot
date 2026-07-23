@@ -4,9 +4,9 @@
 
 import type { Decision } from "./guardrail";
 import type { Retrieved } from "./types";
-import { CONTACT_EMAIL, CONTACT_URL, STRATEGIST_CTA } from "./config";
+import { CONTACT_EMAIL, CONTACT_URL } from "./config";
 
-const CTA = `You can ${STRATEGIST_CTA.toLowerCase()} at ${CONTACT_URL}, or email us at ${CONTACT_EMAIL}.`;
+const CTA = `To connect with an AI strategist, visit ${CONTACT_URL} or email ${CONTACT_EMAIL}.`;
 
 export function pricingRefusal(): string {
   return `Cadre AI doesn't publish set pricing — engagements are scoped to each client's goals, so I can't quote a number here. The best next step is to talk it through with our team. ${CTA}`;
@@ -18,6 +18,10 @@ export function humanHandoff(): string {
 
 export function weakRetrievalEscalation(): string {
   return `I don't have that in our docs, so I don't want to guess. Let me connect you with someone who can help. ${CTA}`;
+}
+
+export function unsupportedRefusal(): string {
+  return `I can't confirm that from Cadre's documentation, and I don't want to guess. If it's something specific you're after, the team can give you a definitive answer. ${CTA}`;
 }
 
 /** Offline grounded answer: quote the top retrieved context and cite it. */
@@ -36,6 +40,8 @@ export function responseForDecision(decision: Decision): string {
       return pricingRefusal();
     case "human_request":
       return humanHandoff();
+    case "unsupported":
+      return unsupportedRefusal();
     case "weak_retrieval":
     default:
       return weakRetrievalEscalation();

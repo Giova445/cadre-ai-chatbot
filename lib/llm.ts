@@ -29,7 +29,7 @@ const STOPWORDS = new Set([
   "that", "this", "it", "as", "at", "by", "be", "can", "i", "my", "me",
 ]);
 
-function tokenize(text: string): string[] {
+export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
@@ -78,8 +78,9 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
   if (!USING_REAL_EMBEDDINGS) return texts.map(lexicalEmbed);
   const provider = realEmbeddingProvider();
   const { embeddings } = await embedMany({
-    model: provider.embedding(EMBED_MODEL, { dimensions: EMBED_DIMENSIONS }),
+    model: provider.embedding(EMBED_MODEL),
     values: texts,
+    providerOptions: { openai: { dimensions: EMBED_DIMENSIONS } },
   });
   return embeddings;
 }

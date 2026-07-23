@@ -80,12 +80,16 @@ export async function POST(req: Request) {
     queryVec = await embedQuery(query);
   } catch {
     // Embeddings failure -> escalate gracefully, never 500 with a leak.
-    return streamed(responseForDecision({ mode: "escalate", reason: "weak_retrieval", citations: [], topScore: 0 }), {
-      mode: "escalate",
-      reason: "embed_error",
-      sources: [],
-      topScore: 0,
-    });
+    return streamed(
+      responseForDecision({
+        mode: "escalate",
+        reason: "weak_retrieval",
+        citations: [],
+        topScore: 0,
+        coverage: 0,
+      }),
+      { mode: "escalate", reason: "embed_error", sources: [], topScore: 0 },
+    );
   }
 
   const results = retrieve(queryVec);
