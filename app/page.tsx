@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Wordmark, BoxMark } from "./logo";
 
 type Role = "user" | "assistant";
 type Msg = {
@@ -25,7 +26,7 @@ const CONTACT_EMAIL = "hello@gocadre.ai";
 function SendIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+      <path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z" />
     </svg>
   );
 }
@@ -73,7 +74,7 @@ export default function Page() {
       }
 
       if (!res.ok || !res.body) {
-        updateLast("Sorry — something went wrong. Please try again.", "escalate", []);
+        updateLast("Sorry, something went wrong. Please try again.", "escalate", []);
         return;
       }
 
@@ -89,7 +90,7 @@ export default function Page() {
       }
       updateLast(acc, mode, sources);
     } catch {
-      updateLast("Sorry — the network dropped. Please try again.", "escalate", []);
+      updateLast("Sorry, the network dropped. Please try again.", "escalate", []);
     } finally {
       setBusy(false);
       scrollDown();
@@ -113,19 +114,17 @@ export default function Page() {
 
   return (
     <div className="shell">
-      <div className="header">
+      <header className="header">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">C</span>
-          <div className="brand-text">
-            <h1>Cadre AI</h1>
-            <span className="tag">Support Assistant · grounded in Cadre&apos;s docs</span>
-          </div>
+          <BoxMark className="brand-mark" />
+          <Wordmark className="wordmark" />
+          <span className="brand-label">Support</span>
         </div>
         <span className="status">
           <span className="status-dot" aria-hidden="true" />
           Online
         </span>
-      </div>
+      </header>
 
       <div
         className="transcript"
@@ -136,13 +135,14 @@ export default function Page() {
       >
         {messages.length === 0 && (
           <div className="empty-state">
-            <span className="brand-mark brand-mark-lg" aria-hidden="true">C</span>
-            <h2>From AI Confusion to AI Confidence</h2>
+            <BoxMark className="empty-mark" />
+            <h1>
+              From AI Confusion to <span className="accent">AI Confidence</span>
+            </h1>
             <p>
-              Ask about Cadre AI&apos;s services, the AI Maturity Index, data
-              security, or booking a strategy call. I only answer from
-              Cadre&apos;s knowledge base — if I don&apos;t know, I&apos;ll
-              connect you with the team.
+              Ask about our services, the AI Maturity Index, data security, or
+              booking a strategy call. I answer only from Cadre&apos;s knowledge
+              base, and if I don&apos;t know, I&apos;ll connect you with the team.
             </p>
           </div>
         )}
@@ -151,12 +151,17 @@ export default function Page() {
           if (m.role === "assistant" && isEscalation(m) && m.content) {
             return (
               <div className="escalation" key={i}>
-                <span className="escalation-icon" aria-hidden="true">!</span>
+                <span className="escalation-icon" aria-hidden="true">
+                  !
+                </span>
                 <div className="escalation-body">
                   <p className="escalation-text">{m.content}</p>
                   <div className="escalation-actions">
                     <a className="cta" href={CONTACT_URL}>
-                      Talk to an AI Strategist →
+                      Talk to an AI Strategist
+                      <span className="arrow" aria-hidden="true">
+                        →
+                      </span>
                     </a>
                     <a className="cta-secondary" href={`mailto:${CONTACT_EMAIL}`}>
                       or email {CONTACT_EMAIL}
@@ -168,9 +173,11 @@ export default function Page() {
           }
           return (
             <div className={`msg-row ${m.role}`} key={i}>
-              <span className="avatar" aria-hidden="true">
-                {m.role === "user" ? "U" : "C"}
-              </span>
+              {m.role === "assistant" && (
+                <span className="avatar" aria-hidden="true">
+                  <BoxMark />
+                </span>
+              )}
               <div className={`msg ${m.role}`}>
                 <span className="sr-only">
                   {m.role === "user" ? "You said" : "Cadre AI said"}:
@@ -178,16 +185,18 @@ export default function Page() {
                 {m.content ? (
                   <>
                     {m.content}
-                    {m.role === "assistant" && m.sources && m.sources.length > 0 && (
-                      <div className="sources">
-                        <span className="sources-label">Sources:</span>
-                        {m.sources.map((s, si) => (
-                          <span className="source-pill" key={si}>
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    {m.role === "assistant" &&
+                      m.sources &&
+                      m.sources.length > 0 && (
+                        <div className="sources">
+                          <span className="sources-label">Sources:</span>
+                          {m.sources.map((s, si) => (
+                            <span className="source-pill" key={si}>
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                   </>
                 ) : m.role === "assistant" && busy ? (
                   <span className="typing" aria-label="Cadre AI is typing">
@@ -235,10 +244,13 @@ export default function Page() {
             disabled={busy || !input.trim()}
             aria-label="Send message"
           >
-            {busy ? <span className="spinner" aria-hidden="true" /> : <SendIcon />}
+            <SendIcon />
           </button>
         </div>
-        <p className="disclaimer">Cadre AI can make mistakes. Verify anything critical.</p>
+        <p className="disclaimer">
+          Cadre AI&apos;s assistant answers from our docs and connects you with a
+          strategist when it can&apos;t.
+        </p>
       </form>
     </div>
   );

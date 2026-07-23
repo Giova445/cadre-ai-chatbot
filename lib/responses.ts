@@ -9,7 +9,7 @@ import { CONTACT_EMAIL, CONTACT_URL } from "./config";
 const CTA = `To connect with an AI strategist, visit ${CONTACT_URL} or email ${CONTACT_EMAIL}.`;
 
 export function pricingRefusal(): string {
-  return `Cadre AI doesn't publish set pricing — engagements are scoped to each client's goals, so I can't quote a number here. The best next step is to talk it through with our team. ${CTA}`;
+  return `Cadre AI doesn't publish set pricing. Engagements are scoped to each client's goals, so I can't quote a number here. The best next step is to talk it through with our team. ${CTA}`;
 }
 
 export function humanHandoff(): string {
