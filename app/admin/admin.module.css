@@ -1595,6 +1595,37 @@
   color: var(--ink);
 }
 
+/* Manual "Process now" row beside the job-detail Refresh link — the operator's
+   escape hatch for a stuck job (cron worker is secret-gated + never runs
+   locally). Inline-flex so it sits in the section head flow. */
+.sitemapDrainRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sitemapDrainBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--red);
+  color: var(--sand);
+  border: 1px solid var(--red);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 13px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.sitemapDrainBtn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.sitemapDrainBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* highlights the row for the currently drilled-into job in the recent-jobs list */
 .tableRowActive {
   background: var(--sand-2);

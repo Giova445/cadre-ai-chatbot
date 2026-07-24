@@ -29,6 +29,7 @@ import {
   CalendarPlus,
   CaretLeft,
   Archive,
+  Play,
 } from "@phosphor-icons/react/dist/ssr";
 
 export type IconProps = ComponentProps<typeof ArrowRight> & {
@@ -51,6 +52,11 @@ export function ForwardIcon({ size = 14, ...rest }: IconProps) {
 
 export function RefreshIcon({ size = 14, ...rest }: IconProps) {
   return <ArrowClockwise size={size} {...base} {...rest} />;
+}
+
+/** "Process now" glyph for the manual crawl-drain button. */
+export function PlayIcon({ size = 14, ...rest }: IconProps) {
+  return <Play size={size} {...base} {...rest} />;
 }
 
 /** Logout button glyph — SignOut (door, not the cliché power icon). */

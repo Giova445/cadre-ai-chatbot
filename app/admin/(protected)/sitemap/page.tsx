@@ -3,6 +3,7 @@ import { sitemapRepo } from "@/lib/ingest/sitemap-repo";
 import { SitemapForm } from "../../_components/SitemapForm";
 import { CrawlJobTable } from "../../_components/CrawlJobTable";
 import { PageStatusTable } from "../../_components/PageStatusTable";
+import { DrainJobButton } from "../../_components/DrainJobButton";
 import { EmptyState } from "../../_components/EmptyState";
 import { EmptyIcon, RefreshIcon } from "../../_components/Icons";
 import styles from "../../admin.module.css";
@@ -79,6 +80,14 @@ export default async function SitemapPage({
                 <RefreshIcon size={13} />
                 <span>Refresh</span>
               </a>
+            )}
+            {selectedJob && selectedJob.status !== "done" && (
+              // Manual escape hatch for a stuck job: the cron worker route is
+              // secret-gated and never runs locally (CRAWL_WORKER_SECRET unset),
+              // so this admin-session button is the only local + prod way to
+              // drain a job short of waiting for cron. Reuses the SAME drain()
+              // as cron — no duplicated crawl logic.
+              <DrainJobButton jobId={selectedJob.id} />
             )}
           </div>
           {!selectedJob ? (
