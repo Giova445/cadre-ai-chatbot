@@ -38,3 +38,14 @@ export function getDb(): Sql {
 export function isDbConfigured(): boolean {
   return Boolean(process.env.DATABASE_URL);
 }
+
+/**
+ * Close the shared client. For short-lived CLI scripts (pnpm ingest) that must
+ * exit cleanly; the long-lived runtime never calls this (the pool stays warm).
+ */
+export async function closeDb(): Promise<void> {
+  if (client) {
+    await client.end({ timeout: 5 });
+    client = null;
+  }
+}
