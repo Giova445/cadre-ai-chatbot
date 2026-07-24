@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { requireAdmin } from "@/lib/admin/auth";
 import { clientRepo } from "@/lib/admin/client-repo";
 import type { ClientSummary } from "@/lib/admin/contracts";
 import { BoxMark, Wordmark } from "../../logo";
-import { LogoutButton } from "../_components/LogoutButton";
-import { ClientSelector } from "../_components/ClientSelector";
+import { AdminNav } from "../_components/AdminNav";
 import styles from "../admin.module.css";
 
 export const metadata: Metadata = {
@@ -45,6 +43,10 @@ export default async function ProtectedAdminLayout({
 
   return (
     <div className={styles.root}>
+      <div className={styles.grain} aria-hidden />
+      <a href="#admin-main" className={styles.skipLink}>
+        Skip to content
+      </a>
       <div className={styles.shell}>
         <header className={styles.header}>
           <div className={styles.brand}>
@@ -52,33 +54,11 @@ export default async function ProtectedAdminLayout({
             <Wordmark className={styles.wordmark} />
             <span className={styles.brandLabel}>Admin</span>
           </div>
-          <nav className={styles.nav} aria-label="Admin navigation">
-            <Link href="/admin/conversations" className={styles.navLink}>
-              Conversations
-            </Link>
-            <Link href="/admin/questions" className={styles.navLink}>
-              Questions
-            </Link>
-            <Link href="/admin/queue" className={styles.navLink}>
-              Queue
-            </Link>
-            <Link href="/admin/gaps" className={styles.navLink}>
-              Gaps
-            </Link>
-            <Link href="/admin/usage" className={styles.navLink}>
-              Usage
-            </Link>
-            <Link href="/admin/embed" className={styles.navLink}>
-              Embed
-            </Link>
-            <Link href="/admin/sitemap" className={styles.navLink}>
-              Sitemap
-            </Link>
-            {showSelector && <ClientSelector clients={clients} />}
-            <LogoutButton />
-          </nav>
+          <AdminNav clients={clients} showSelector={showSelector} />
         </header>
-        <main className={styles.main}>{children}</main>
+        <main id="admin-main" className={styles.main} tabIndex={-1}>
+          {children}
+        </main>
       </div>
     </div>
   );

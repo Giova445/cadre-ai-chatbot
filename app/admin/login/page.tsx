@@ -1,12 +1,16 @@
 "use client";
 
-// Admin login — a small brand-styled password form. Client component: POSTs the
-// password to /api/admin/login and, on success, routes into the dashboard. It is
-// pure UX; the real gate is requireAdmin() server-side in each admin route/RSC.
+// Admin login — dark-sand to match the admin (kills the jarring theme jump
+// from light login to dark admin). All styling lives in admin.module.css:
+// no inline styles, no globals.css inheritance. The login is a self-contained
+// surface (the protected layout has its own dark .root scope that globals'
+// light .shell would fight).
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BoxMark, Wordmark } from "@/app/logo";
+import { ForwardIcon } from "../_components/Icons";
+import styles from "../admin.module.css";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -43,34 +47,24 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="shell">
-      <div style={{ margin: "auto", width: "100%", maxWidth: 380 }}>
-        <div
-          className="brand"
-          style={{ justifyContent: "center", marginBottom: 24 }}
-        >
-          <BoxMark className="brand-mark" />
-          <Wordmark className="wordmark" />
-          <span className="brand-label">Admin</span>
+    <div className={`${styles.root} ${styles.loginShell}`}>
+      <div className={styles.grain} aria-hidden />
+      <div className={styles.loginBody}>
+        <div className={styles.loginBrand}>
+          <BoxMark className={styles.loginBrandMark} />
+          <Wordmark className={styles.loginWordmark} />
+          <span className={styles.loginBrandLabel}>Admin</span>
         </div>
 
-        <div className="card">
-          <h1 className="page-title" style={{ fontSize: 22, marginBottom: 6 }}>
-            Sign in
-          </h1>
-          <p
-            className="muted"
-            style={{ margin: "0 0 18px", fontSize: 14 }}
-          >
+        <div className={styles.loginCard}>
+          <h1 className={styles.loginTitle}>Sign in</h1>
+          <p className={styles.loginSub}>
             Enter the admin password to view conversations and retrieval traces.
           </p>
 
-          <form
-            onSubmit={onSubmit}
-            style={{ display: "flex", flexDirection: "column", gap: 12 }}
-          >
+          <form className={styles.loginForm} onSubmit={onSubmit}>
             <input
-              className="field"
+              className={styles.loginField}
               type="password"
               name="password"
               autoComplete="current-password"
@@ -81,42 +75,29 @@ export default function AdminLoginPage() {
               aria-invalid={error ? true : undefined}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              disabled={submitting}
             />
 
             {error ? (
-              <p
-                role="alert"
-                style={{ margin: 0, color: "var(--red-ink)", fontSize: 13.5 }}
-              >
+              <p role="alert" className={styles.loginError}>
                 {error}
               </p>
             ) : null}
 
             <button
               type="submit"
-              className="cta"
+              className={styles.loginCta}
               disabled={submitting || password.length === 0}
-              style={{
-                justifyContent: "center",
-                border: "none",
-                cursor: submitting ? "wait" : "pointer",
-                opacity: submitting || password.length === 0 ? 0.55 : 1,
-              }}
             >
               {submitting ? "Signing in…" : "Sign in"}
-              <span className="arrow" aria-hidden="true">
-                →
+              <span className={styles.loginArrow} aria-hidden>
+                <ForwardIcon size={14} />
               </span>
             </button>
           </form>
         </div>
 
-        <p
-          className="muted"
-          style={{ textAlign: "center", margin: "16px 0 0", fontSize: 12 }}
-        >
-          Cadre · Admin
-        </p>
+        <p className={styles.loginFooter}>Cadre · Admin</p>
       </div>
     </div>
   );

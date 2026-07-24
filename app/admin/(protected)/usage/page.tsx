@@ -70,28 +70,25 @@ export default async function UsagePage({
   return (
     <div className={styles.page}>
       <div className={styles.pageHead}>
-        <h1 className={styles.pageTitle}>Usage &amp; Cost</h1>
+        <span className={styles.overline}>Cost</span>
+        <h1 className={styles.pageTitle}>Usage & Cost</h1>
         <p className={styles.pageSub}>
-          Month to date ({from} – {to})
+          <span className={styles.countChip}>{from} – {to}</span>
+          Month to date
           {client ? ` · client: ${client}` : ""}
         </p>
         {selectorClients.length > 0 && <ClientSelector clients={selectorClients} />}
       </div>
 
-      <BalanceCard balance={balance} />
+      <div className={styles.usageGrid}>
+        <BalanceCard balance={balance} />
 
-      <section className={styles.usageSection} aria-label="Clients overview">
-        <h2 className={styles.usageSectionTitle}>Clients</h2>
-        <UsageClientsTable rows={clientsOverview} budgets={budgets} activeClient={client} />
-      </section>
-
-      {client && report && budgetStatus && (
-        <>
-          <section className={styles.usageSection} aria-label={`Budget for ${client}`}>
-            <div className={styles.usageSectionHead}>
-              <h2 className={styles.usageSectionTitle}>Budget</h2>
-              <BudgetStatusBadge status={budgetStatus.status} />
-            </div>
+        <section className={styles.usageSection} aria-label={`Budget for ${client ?? "default"}`}>
+          <div className={styles.usageSectionHead}>
+            <h2 className={styles.usageSectionTitle}>Budget</h2>
+            {client && budgetStatus ? <BudgetStatusBadge status={budgetStatus.status} /> : null}
+          </div>
+          {client && report && budgetStatus ? (
             <p className={styles.pageSub}>
               {formatUsd(nanoToUsd(budgetStatus.usedNanoUsd))} of{" "}
               {budgetStatus.ceilingNanoUsd > 0
@@ -100,8 +97,27 @@ export default async function UsagePage({
               this month ({budgetStatus.pct.toFixed(1)}%)
               {budgetStatus.status === "over" ? " — over ceiling" : ""}
             </p>
-          </section>
+          ) : (
+            <p className={styles.pageSub}>
+              No client selected — pick one above to see its budget posture.
+            </p>
+          )}
+          <div className={styles.usageGridFull}>
+            <BudgetEditor budgets={budgets} defaultClientId={client} />
+          </div>
+        </section>
 
+        <section
+          className={`${styles.usageSection} ${styles.usageGridFull}`}
+          aria-label="Clients overview"
+        >
+          <h2 className={styles.usageSectionTitle}>Clients</h2>
+          <UsageClientsTable rows={clientsOverview} budgets={budgets} activeClient={client} />
+        </section>
+      </div>
+
+      {client && report && budgetStatus && (
+        <>
           <section className={styles.usageSection} aria-label="Usage by day">
             <h2 className={styles.usageSectionTitle}>By day</h2>
             <UsageDayTable rows={report.days} />
@@ -124,11 +140,6 @@ export default async function UsagePage({
           Select a client above to see its per-day, per-model, and per-conversation breakdown.
         </p>
       )}
-
-      <section className={styles.usageSection} aria-label="Budget editor">
-        <h2 className={styles.usageSectionTitle}>Edit budget</h2>
-        <BudgetEditor budgets={budgets} defaultClientId={client} />
-      </section>
     </div>
   );
 }

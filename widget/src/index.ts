@@ -53,6 +53,11 @@ function boot(): void {
     if (open) {
       unread = 0;
       launcher.setUnread(0);
+      // Reopening clears any stale status from the last turn (e.g. a red
+      // "Offline" that persisted after an error) — a freshly opened panel is
+      // online and ready. Safe because a closed panel can't have a turn
+      // in-flight (only an open composer can send).
+      panel.setStatus("online");
       // Wait a frame so the panel is laid out (not `hidden`) before focusing.
       requestAnimationFrame(() => panel.focusComposer());
     }

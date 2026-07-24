@@ -53,7 +53,7 @@ export function UsageClientsTable({
   activeClient?: string;
 }) {
   if (rows.length === 0) {
-    return <p className={styles.emptyState}>No usage recorded yet.</p>;
+    return <p className={styles.emptyStateBare}>No usage recorded yet.</p>;
   }
 
   return (

@@ -8,6 +8,8 @@ import { RetrievalTracePanel } from "../../../_components/RetrievalTracePanel";
 import { ModeBadge } from "../../../_components/ModeBadge";
 import { FlagBadge } from "../../../_components/FlagBadge";
 import { FlagForm } from "../../../_components/FlagForm";
+import { Reveal } from "../../../_components/Reveal";
+import { BackIcon, CrumbIcon } from "../../../_components/Icons";
 import styles from "../../../admin.module.css";
 
 const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
@@ -48,62 +50,83 @@ export default async function ConversationDetailPage({
 
   return (
     <div className={styles.page}>
-      <Link href={`/admin/conversations${clientQs}`} className={styles.backLink}>
-        ← All conversations
-      </Link>
+      <nav className={styles.breadcrumb} aria-label="Conversation breadcrumb">
+        <Link href={`/admin/conversations${clientQs}`} className={styles.backLink}>
+          <BackIcon size={12} />
+          <span>Conversations</span>
+        </Link>
+        <span className={styles.breadcrumbSep} aria-hidden>
+          <CrumbIcon size={10} />
+        </span>
+        <span className={styles.breadcrumbCurrent}>
+          <code>{conversation.sessionId}</code>
+        </span>
+      </nav>
 
       <div className={styles.detailHead}>
-        <h1 className={styles.pageTitle}>Conversation</h1>
-        <dl className={styles.detailMeta}>
-          <div>
-            <dt>Started</dt>
-            <dd>{DATE_FORMAT.format(new Date(conversation.startedAt))}</dd>
-          </div>
-          <div>
-            <dt>Session</dt>
-            <dd>
-              <Link href={sessionHref} className={styles.cellLink}>
-                <code>{conversation.sessionId}</code>
-              </Link>
-            </dd>
-          </div>
-          <div>
-            <dt>Turns</dt>
-            <dd>{conversation.messageCount}</dd>
-          </div>
-          <div>
-            <dt>Last mode</dt>
-            <dd>
-              <ModeBadge mode={conversation.lastMode} />
-            </dd>
-          </div>
-        </dl>
+        <span className={styles.overline}>Conversation</span>
+        <h1 className={styles.pageTitleDetail}>{conversation.sessionId}</h1>
       </div>
 
-      <div className={styles.transcript} role="log" aria-label="Conversation transcript">
-        {messages.map((message) => {
-          const isAssistant = message.role === "assistant";
-          const trace = isAssistant ? traces[message.id] : undefined;
-          const flags = isAssistant ? flagsByMessage[message.id] ?? [] : [];
-          return (
-            <div key={message.id} className={styles.transcriptItem}>
-              <TranscriptTurn message={message} />
-              {trace && <RetrievalTracePanel trace={trace} />}
-              {isAssistant && (
-                <div className={styles.flagArea}>
-                  {flags.length > 0 && (
-                    <div className={styles.flagList} aria-label="Flags on this answer">
-                      {flags.map((flag) => (
-                        <FlagBadge key={flag.id} flag={flag} />
-                      ))}
+      <div className={styles.splitLayout}>
+        <aside className={styles.splitRail} aria-label="Conversation metadata">
+          <dl className={styles.detailMeta}>
+            <div>
+              <dt>Started</dt>
+              <dd>{DATE_FORMAT.format(new Date(conversation.startedAt))}</dd>
+            </div>
+            <div>
+              <dt>Session</dt>
+              <dd>
+                <Link href={sessionHref} className={styles.cellLink}>
+                  <code>{conversation.sessionId}</code>
+                </Link>
+              </dd>
+            </div>
+            <div>
+              <dt>Turns</dt>
+              <dd>{conversation.messageCount}</dd>
+            </div>
+            <div>
+              <dt>Last mode</dt>
+              <dd>
+                <ModeBadge mode={conversation.lastMode} />
+              </dd>
+            </div>
+          </dl>
+        </aside>
+
+        <div className={styles.splitMain}>
+          <div
+            className={styles.transcript}
+            role="log"
+            aria-label="Conversation transcript"
+          >
+            {messages.map((message, index) => {
+              const isAssistant = message.role === "assistant";
+              const trace = isAssistant ? traces[message.id] : undefined;
+              const flags = isAssistant ? flagsByMessage[message.id] ?? [] : [];
+              return (
+                <Reveal key={message.id} index={index} as="div" className={styles.transcriptItem}>
+                  <TranscriptTurn message={message} />
+                  {trace && <RetrievalTracePanel trace={trace} />}
+                  {isAssistant && (
+                    <div className={styles.flagArea}>
+                      {flags.length > 0 && (
+                        <div className={styles.flagList} aria-label="Flags on this answer">
+                          {flags.map((flag) => (
+                            <FlagBadge key={flag.id} flag={flag} />
+                          ))}
+                        </div>
+                      )}
+                      <FlagForm messageId={message.id} />
                     </div>
                   )}
-                  <FlagForm messageId={message.id} />
-                </div>
-              )}
-            </div>
-          );
-        })}
+                </Reveal>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );

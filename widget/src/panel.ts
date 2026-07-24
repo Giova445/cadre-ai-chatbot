@@ -12,9 +12,19 @@ import { createSendIcon } from "./icons";
 
 type UIMessage = StoredMessage & { mode?: string; sources?: string[] };
 
+export type PanelStatus = "idle" | "thinking" | "online" | "error";
+
 export type PanelController = {
   element: HTMLElement;
   focusComposer(): void;
+  setStatus(status: PanelStatus): void;
+};
+
+const STATUS_COPY: Record<PanelStatus, string> = {
+  idle: "Online",
+  thinking: "Thinking…",
+  online: "Online",
+  error: "Offline",
 };
 
 export type PanelCallbacks = {
@@ -27,7 +37,12 @@ function isEscalation(m: UIMessage): boolean {
   return m.mode === "escalate" || m.mode === "refuse";
 }
 
-function buildHeader(): { element: HTMLElement; closeButton: HTMLButtonElement } {
+function buildHeader(): {
+  element: HTMLElement;
+  closeButton: HTMLButtonElement;
+  statusDot: HTMLSpanElement;
+  statusLabel: HTMLSpanElement;
+} {
   const header = document.createElement("div");
   header.className = "panel-header";
 
@@ -53,7 +68,7 @@ function buildHeader(): { element: HTMLElement; closeButton: HTMLButtonElement }
   closeButton.append(createCloseGlyph());
 
   header.append(brand, closeButton);
-  return { element: header, closeButton };
+  return { element: header, closeButton, statusDot: dot, statusLabel };
 }
 
 // A tiny inline "x" built from DOM primitives (kept out of icons.ts since it's
@@ -69,6 +84,7 @@ function buildComposer(): {
   form: HTMLFormElement;
   input: HTMLInputElement;
   onSubmit: (cb: (text: string) => void) => void;
+  onComposeFocus: (cb: () => void) => void;
   setBusy: (busy: boolean) => void;
 } {
   const form = document.createElement("form");
@@ -103,6 +119,9 @@ function buildComposer(): {
     sendBtn.disabled = input.value.trim().length === 0;
   });
 
+  let focusHandler: (() => void) | null = null;
+  input.addEventListener("focus", () => focusHandler?.());
+
   let submitHandler: ((text: string) => void) | null = null;
   form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -117,6 +136,9 @@ function buildComposer(): {
     input,
     onSubmit: (cb) => {
       submitHandler = cb;
+    },
+    onComposeFocus: (cb) => {
+      focusHandler = cb;
     },
     setBusy: (busy) => {
       sendBtn.disabled = busy || input.value.trim().length === 0;
@@ -198,7 +220,12 @@ export function createPanel(cfg: WidgetConfig, callbacks: PanelCallbacks = {}): 
   element.setAttribute("role", "dialog");
   element.setAttribute("aria-label", "Cadre AI chat");
 
-  const { element: header, closeButton } = buildHeader();
+  const {
+    element: header,
+    closeButton,
+    statusDot,
+    statusLabel,
+  } = buildHeader();
 
   const transcript = document.createElement("div");
   transcript.className = "transcript";
@@ -219,6 +246,17 @@ export function createPanel(cfg: WidgetConfig, callbacks: PanelCallbacks = {}): 
   // resume (see docs/product/client-rollout-features.md § A "Session identity").
   let messages: UIMessage[] = loadHistory();
   let busy = false;
+
+  function setStatus(s: PanelStatus): void {
+    statusLabel.textContent = STATUS_COPY[s];
+    statusDot.dataset.state = s;
+  }
+
+  // Initialise the dot to a real state so the CSS data-state selectors engage
+  // (otherwise the dot is styled only by the generic base rule and the label
+  // is a static "Online" that can drift out of sync with reality). "online"
+  // = panel is live and ready to receive input.
+  setStatus("online");
 
   function renderEmptyState(): void {
     const empty = document.createElement("div");
@@ -307,6 +345,7 @@ export function createPanel(cfg: WidgetConfig, callbacks: PanelCallbacks = {}): 
     if (!q || busy) return;
     busy = true;
     composer.setBusy(true);
+    setStatus("thinking");
 
     messages = [...messages, { role: "user", content: q }, { role: "assistant", content: "" }];
     renderMessages();
@@ -327,18 +366,26 @@ export function createPanel(cfg: WidgetConfig, callbacks: PanelCallbacks = {}): 
           saveHistory(messages.map(({ role, content }) => ({ role, content })));
           busy = false;
           composer.setBusy(false);
+          setStatus("online");
           callbacks.onTurnComplete?.(meta);
         },
         onError: (message) => {
           updateLastAssistant(message, "escalate", []);
           busy = false;
           composer.setBusy(false);
+          setStatus("error");
         },
       },
     );
   }
 
   composer.onSubmit((text) => void send(text));
+  // When the user refocuses the composer after a failed turn, clear the stale
+  // "Offline" indicator so the dot recovers green without needing a close +
+  // reopen. Skipped mid-turn (busy) so an in-flight "Thinking…" isn't clobbered.
+  composer.onComposeFocus(() => {
+    if (!busy) setStatus("online");
+  });
   closeButton.addEventListener("click", () => {
     element.dispatchEvent(new CustomEvent("cadre:close"));
   });
@@ -348,5 +395,6 @@ export function createPanel(cfg: WidgetConfig, callbacks: PanelCallbacks = {}): 
   return {
     element,
     focusComposer: () => composer.input.focus(),
+    setStatus,
   };
 }

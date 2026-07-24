@@ -31,10 +31,11 @@ export default async function QuestionsPage({
   return (
     <div className={styles.page}>
       <div className={styles.pageHead}>
+        <span className={styles.overline}>Conversational</span>
         <h1 className={styles.pageTitle}>Starter questions</h1>
         <p className={styles.pageSub}>
-          {starters.length} {starters.length === 1 ? "chip" : "chips"} · client{" "}
-          <code>{client}</code>
+          <span className={styles.countChip}>{starters.length}</span>
+          {starters.length === 1 ? "chip" : "chips"} · client <code>{client}</code>
         </p>
       </div>
 

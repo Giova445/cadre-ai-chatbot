@@ -3,6 +3,8 @@ import { sitemapRepo } from "@/lib/ingest/sitemap-repo";
 import { SitemapForm } from "../../_components/SitemapForm";
 import { CrawlJobTable } from "../../_components/CrawlJobTable";
 import { PageStatusTable } from "../../_components/PageStatusTable";
+import { EmptyState } from "../../_components/EmptyState";
+import { EmptyIcon, RefreshIcon } from "../../_components/Icons";
 import styles from "../../admin.module.css";
 
 const RECENT_JOBS_LIMIT = 20;
@@ -36,6 +38,7 @@ export default async function SitemapPage({
   return (
     <div className={styles.page}>
       <div className={styles.pageHead}>
+        <span className={styles.overline}>Ingest</span>
         <h1 className={styles.pageTitle}>Sitemap ingest</h1>
         <p className={styles.pageSub}>
           Crawl a site's sitemap into the knowledge base
@@ -50,7 +53,11 @@ export default async function SitemapPage({
           Recent crawl jobs
         </h2>
         {jobs.length === 0 ? (
-          <p className={styles.emptyState}>No crawl jobs yet. Paste a sitemap URL above to start one.</p>
+          <EmptyState
+            Icon={EmptyIcon.Inbox}
+            title="No crawl jobs yet"
+            body="Paste a sitemap URL in the form above to start a crawl. Discovered pages will appear here as they're queued, embedded, or skipped."
+          />
         ) : (
           <CrawlJobTable jobs={jobs} activeJobId={selectedJob?.id} client={client} />
         )}
@@ -68,13 +75,18 @@ export default async function SitemapPage({
               // identical, which is enough to watch a crawl's per-page
               // statuses progress from queued -> embedded/skipped/failed
               // without any client-side polling.
-              <a href={refreshHref(client, jobId)} className={styles.cellLink}>
-                Refresh
+              <a href={refreshHref(client, jobId)} className={styles.refreshLink}>
+                <RefreshIcon size={13} />
+                <span>Refresh</span>
               </a>
             )}
           </div>
           {!selectedJob ? (
-            <p className={styles.emptyState}>This crawl job could not be found.</p>
+            <EmptyState
+              Icon={EmptyIcon.Inbox}
+              title="This crawl job could not be found"
+              body="It may have been deleted, or the id in the URL is stale. Pick another job from the list above."
+            />
           ) : selectedJob.status !== "done" ? (
             <p className={styles.pageNote}>
               Crawling — {selectedJob.embedded + selectedJob.skipped + selectedJob.failed} of{" "}
@@ -82,7 +94,11 @@ export default async function SitemapPage({
             </p>
           ) : null}
           {pages.length === 0 ? (
-            <p className={styles.emptyState}>No pages discovered yet for this job.</p>
+            <EmptyState
+              Icon={EmptyIcon.Inbox}
+              title="No pages discovered yet for this job"
+              body="The crawler is still reading the sitemap. Hit Refresh to watch pages appear as they're discovered and queued."
+            />
           ) : (
             <PageStatusTable pages={pages} />
           )}

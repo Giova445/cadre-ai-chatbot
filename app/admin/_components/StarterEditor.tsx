@@ -15,6 +15,8 @@ import {
 } from "@/lib/starters";
 import type { StarterRow } from "@/lib/admin/contracts";
 import { StarterRowItem } from "./StarterRowItem";
+import { EmptyState } from "./EmptyState";
+import { EmptyIcon } from "./Icons";
 import styles from "../admin.module.css";
 
 // The maker starter-questions editor (Rollout § C, § 4.4). Renders off the
@@ -130,9 +132,12 @@ export function StarterEditor({
       )}
 
       {starters.length === 0 ? (
-        <p className={styles.emptyState}>
-          No starter questions for this client yet. Visitors see the built-in defaults.
-        </p>
+        <EmptyState
+          Icon={EmptyIcon.Questions}
+          size="panel"
+          title="No starter questions for this client"
+          body="Visitors see the built-in defaults. Add a chip below to override the default prompt set for this client."
+        />
       ) : (
         <ol className={styles.starterList}>
           {starters.map((starter, index) => (

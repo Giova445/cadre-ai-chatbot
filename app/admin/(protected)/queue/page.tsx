@@ -6,6 +6,8 @@ import type { FlagStatus } from "@/lib/admin/contracts";
 import { ModeBadge } from "../../_components/ModeBadge";
 import { StatusControl } from "../../_components/StatusControl";
 import { CATEGORY_LABELS, StatusPill } from "../../_components/FlagBadge";
+import { EmptyState } from "../../_components/EmptyState";
+import { EmptyIcon } from "../../_components/Icons";
 import styles from "../../admin.module.css";
 
 const LIMIT = 20;
@@ -67,9 +69,11 @@ export default async function QueuePage({
   return (
     <div className={styles.page}>
       <div className={styles.pageHead}>
+        <span className={styles.overline}>Review</span>
         <h1 className={styles.pageTitle}>Review queue</h1>
         <p className={styles.pageSub}>
-          {total} flagged {total === 1 ? "answer" : "answers"}
+          <span className={styles.countChip}>{total}</span>
+          flagged {total === 1 ? "answer" : "answers"}
           {client ? ` · client: ${client}` : ""}
         </p>
       </div>
@@ -91,7 +95,15 @@ export default async function QueuePage({
       </div>
 
       {rows.length === 0 ? (
-        <p className={styles.emptyState}>No flags in this view.</p>
+        <EmptyState
+          Icon={EmptyIcon.Flags}
+          title={status ? `No ${status} flags in this view` : "No flags in this view"}
+          body={
+            status
+              ? "Switch the status filter above to see flags in other states, or open a conversation and flag an answer to populate this queue."
+              : "Flag an answer from a conversation detail view to populate the review queue. Flagged answers will surface here for triage."
+          }
+        />
       ) : (
         <>
           <div className={styles.tableWrap}>

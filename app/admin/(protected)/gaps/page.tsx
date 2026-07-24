@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { gapRepo } from "@/lib/admin/gap-repo";
 import { ModeBadge } from "../../_components/ModeBadge";
 import { ScoreBar } from "../../_components/ScoreBar";
+import { EmptyState } from "../../_components/EmptyState";
+import { EmptyIcon } from "../../_components/Icons";
 import styles from "../../admin.module.css";
 
 const LIMIT = 20;
@@ -50,9 +52,11 @@ export default async function GapsPage({
   return (
     <div className={styles.page}>
       <div className={styles.pageHead}>
+        <span className={styles.overline}>Knowledge base</span>
         <h1 className={styles.pageTitle}>KB gaps</h1>
         <p className={styles.pageSub}>
-          {total} {total === 1 ? "candidate" : "candidates"} for KB improvement
+          <span className={styles.countChip}>{total}</span>
+          {total === 1 ? "candidate" : "candidates"} for KB improvement
           {client ? ` · client: ${client}` : ""}
         </p>
       </div>
@@ -62,7 +66,11 @@ export default async function GapsPage({
       </p>
 
       {rows.length === 0 ? (
-        <p className={styles.emptyState}>No gaps detected yet.</p>
+        <EmptyState
+          Icon={EmptyIcon.Gaps}
+          title="No gaps detected yet"
+          body="A gap candidate appears when the chatbot escalates, refuses, or returns a low-retrieval-score answer. Run traffic against the public chatbot — escalations and weak hits will surface here automatically."
+        />
       ) : (
         <>
           <div className={styles.tableWrap}>

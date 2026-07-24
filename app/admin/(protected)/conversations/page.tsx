@@ -3,6 +3,8 @@ import { requireAdmin } from "@/lib/admin/auth";
 import { conversationRepo } from "@/lib/admin/repos";
 import type { DecisionMode } from "@/lib/admin/contracts";
 import { ConversationTable } from "../../_components/ConversationTable";
+import { EmptyState } from "../../_components/EmptyState";
+import { EmptyIcon } from "../../_components/Icons";
 import styles from "../../admin.module.css";
 
 const LIMIT = 20;
@@ -64,9 +66,11 @@ export default async function ConversationsPage({
   return (
     <div className={styles.page}>
       <div className={styles.pageHead}>
+        <span className={styles.overline}>Conversations</span>
         <h1 className={styles.pageTitle}>Conversations</h1>
         <p className={styles.pageSub}>
-          {total} logged {total === 1 ? "conversation" : "conversations"}
+          <span className={styles.countChip}>{total}</span>
+          {total === 1 ? "conversation logged" : "conversations logged"}
           {client ? ` · client: ${client}` : ""}
         </p>
       </div>
@@ -97,7 +101,11 @@ export default async function ConversationsPage({
       </div>
 
       {rows.length === 0 ? (
-        <p className={styles.emptyState}>No conversations logged yet.</p>
+        <EmptyState
+          Icon={EmptyIcon.Conversations}
+          title="No conversations logged yet"
+          body="Conversations appear here as the public chatbot finishes its first turns. Try the public site or your own scenario chips to seed traffic."
+        />
       ) : (
         <>
           <ConversationTable rows={rows} showClient={showClient} activeClient={client} />

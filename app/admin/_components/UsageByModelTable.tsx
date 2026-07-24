@@ -6,7 +6,7 @@ import styles from "../admin.module.css";
 // UsageReport.byModel (lib/usage/report.ts getUsageReport).
 export function UsageByModelTable({ rows }: { rows: Array<{ model: string; costUsd: number }> }) {
   if (rows.length === 0) {
-    return <p className={styles.emptyState}>No per-model cost data for this range.</p>;
+    return <p className={styles.emptyStateBare}>No per-model cost data for this range.</p>;
   }
 
   return (

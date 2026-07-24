@@ -10,11 +10,24 @@ import styles from "../admin.module.css";
 const DEFAULT_TARGET = "#cadre-here";
 const BRAND_COLOR = "#db4545";
 
-// The appearance form + generated snippet + live preview for one client
-// (Admin § A2). A client island: the surrounding page (Server Component)
-// resolves the client id and our deploy origin; everything below is a pure
-// function of local form state plus lib/widget-snippet's pure builders — no
-// Server Action, no mutation (this screen reads + generates only, § A8).
+type ModeId = WidgetMode;
+type PositionId = WidgetPosition;
+
+const MODES: { id: ModeId; label: string; hint: string }[] = [
+  { id: "launcher", label: "Launcher", hint: "Floating bubble in the corner." },
+  { id: "inline", label: "Inline", hint: "Mounts into a target element in page flow." },
+];
+
+const POSITIONS: { id: PositionId; label: string }[] = [
+  { id: "bottom-right", label: "Bottom right" },
+  { id: "bottom-left", label: "Bottom left" },
+];
+
+// The appearance configurator + live preview + generated snippet for one
+// client (Admin § A2). A client island: the surrounding page (Server
+// Component) resolves the client id and our deploy origin; everything below is
+// a pure function of local form state plus lib/widget-snippet's pure builders —
+// no Server Action, no mutation (this screen reads + generates only, § A8).
 export function EmbedPanel({ client, apiBase }: { client: string; apiBase: string }) {
   const [mode, setMode] = useState<WidgetMode>("launcher");
   const [target, setTarget] = useState(DEFAULT_TARGET);
@@ -52,137 +65,174 @@ export function EmbedPanel({ client, apiBase }: { client: string; apiBase: strin
     return `/embed/preview?${params.toString()}`;
   }, [client, mode, target, color, position, greeting]);
 
+  const activeMode = MODES.find((m) => m.id === mode) ?? MODES[0];
+
   return (
-    <div className={styles.page}>
-      <div className={styles.pageHead}>
-        <h1 className={styles.pageTitle}>Embed</h1>
-        <p className={styles.pageSub}>
-          client <code>{client}</code>
-        </p>
+    <div className={styles.embedShell}>
+      <div className={styles.embedHead}>
+        <div>
+          <p className={styles.embedEyebrow}>Embed</p>
+          <h1 className={styles.embedTitle}>Widget snippet</h1>
+          <p className={styles.embedSub}>
+            Copy-paste the snippet to embed the Cadre AI chat on{" "}
+            <code className={styles.embedCode}>{client}</code>. The snippet carries only the public
+            client id and this deploy's origin — no key or secret ever leaves the server.
+          </p>
+        </div>
+        <a
+          className={styles.embedHelpLink}
+          href="/contact"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Snippet docs
+        </a>
       </div>
 
-      <p className={styles.pageNote}>
-        Copy-paste snippet for embedding the Cadre AI chat widget on this client&apos;s site. The
-        snippet carries only the public client id and this deploy&apos;s origin — no key or secret
-        ever leaves the server.
-      </p>
-
-      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
-        <form
-          className={styles.starterEditor}
-          style={{ flex: "1 1 320px", minWidth: 280 }}
-          aria-label="Widget appearance"
-        >
-          <fieldset style={{ border: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-            <legend className={styles.flagFormLabel}>Mode</legend>
-            <label className={styles.flagFormField} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <input
-                type="radio"
-                name="embed-mode"
-                value="launcher"
-                checked={mode === "launcher"}
-                onChange={() => setMode("launcher")}
-              />
-              Launcher (floating bubble)
-            </label>
-            <label className={styles.flagFormField} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <input
-                type="radio"
-                name="embed-mode"
-                value="inline"
-                checked={mode === "inline"}
-                onChange={() => setMode("inline")}
-              />
-              Inline (embedded in page flow)
-            </label>
-          </fieldset>
+      <div className={styles.embedGrid}>
+        <form className={styles.embedConfig} aria-label="Widget appearance">
+          <section className={styles.embedFieldGroup}>
+            <span className={styles.embedGroupLabel}>Mode</span>
+            <div className={styles.embedSegmented} role="radiogroup" aria-label="Widget mode">
+              {MODES.map((m) => {
+                const active = mode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`${styles.embedSeg} ${active ? styles.embedSegActive : ""}`}
+                    onClick={() => setMode(m.id)}
+                  >
+                    <span className={styles.embedSegLabel}>{m.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className={styles.embedGroupHint}>{activeMode.hint}</p>
+          </section>
 
           {mode === "inline" && (
-            <label className={styles.flagFormField}>
-              <span className={styles.flagFormLabel}>Target selector</span>
+            <section className={styles.embedFieldGroup}>
+              <label className={styles.embedLabel} htmlFor="embed-target">
+                Target selector
+              </label>
               <input
-                className={styles.flagInput}
+                id="embed-target"
+                className={styles.embedInput}
                 type="text"
                 value={target}
                 onChange={(e) => setTarget(e.target.value)}
                 placeholder={DEFAULT_TARGET}
                 aria-describedby="embed-target-hint"
+                spellCheck={false}
               />
-              <span id="embed-target-hint" className={styles.starterHint}>
-                A CSS selector for the element the widget mounts into on the client&apos;s page.
-              </span>
-            </label>
+              <p id="embed-target-hint" className={styles.embedHint}>
+                A CSS selector for the element the widget mounts into on the client's page.
+              </p>
+            </section>
           )}
 
           {mode === "launcher" && (
-            <label className={styles.flagFormField}>
-              <span className={styles.flagFormLabel}>Position</span>
-              <select
-                className={styles.flagSelect}
-                value={position}
-                onChange={(e) => setPosition(e.target.value as WidgetPosition)}
+            <section className={styles.embedFieldGroup}>
+              <span className={styles.embedGroupLabel}>Position</span>
+              <div
+                className={styles.embedSegmented}
+                role="radiogroup"
+                aria-label="Launcher position"
               >
-                <option value="bottom-right">Bottom right</option>
-                <option value="bottom-left">Bottom left</option>
-              </select>
-            </label>
+                {POSITIONS.map((p) => {
+                  const active = position === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      className={`${styles.embedSeg} ${active ? styles.embedSegActive : ""}`}
+                      onClick={() => setPosition(p.id)}
+                    >
+                      <span className={styles.embedSegLabel}>{p.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
           )}
 
-          <label className={styles.flagFormField}>
-            <span className={styles.flagFormLabel}>Color</span>
-            <input
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              aria-label="Accent color"
-              style={{ width: 60, height: 34, padding: 2, border: "none", background: "transparent" }}
-            />
-          </label>
+          <div className={styles.embedTwoCol}>
+            <section className={styles.embedFieldGroup}>
+              <label className={styles.embedLabel} htmlFor="embed-color">
+                Accent color
+              </label>
+              <div className={styles.embedColorRow}>
+                <span
+                  className={styles.embedSwatch}
+                  style={{ background: color }}
+                  aria-hidden="true"
+                />
+                <input
+                  id="embed-color"
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  aria-label="Accent color"
+                  className={styles.embedColorInput}
+                />
+                <code className={styles.embedSwatchCode}>{color.toUpperCase()}</code>
+              </div>
+            </section>
 
-          <label className={styles.flagFormField}>
-            <span className={styles.flagFormLabel}>Greeting</span>
-            <input
-              className={styles.flagInput}
-              type="text"
-              value={greeting}
-              onChange={(e) => setGreeting(e.target.value)}
-              maxLength={160}
-            />
-          </label>
+            <section className={styles.embedFieldGroup}>
+              <label className={styles.embedLabel} htmlFor="embed-greeting">
+                Greeting
+              </label>
+              <input
+                id="embed-greeting"
+                className={styles.embedInput}
+                type="text"
+                value={greeting}
+                onChange={(e) => setGreeting(e.target.value)}
+                maxLength={160}
+                placeholder={DEFAULT_GREETING}
+              />
+            </section>
+          </div>
         </form>
 
-        <EmbedPreview src={previewSrc} />
+        <EmbedPreview src={previewSrc} mode={mode} position={position} />
       </div>
 
-      <div className={styles.tracePanel}>
-        <div className={styles.traceHead}>
-          <button
-            type="button"
-            className={format === "script" ? styles.filterChipActive : styles.filterChip}
-            onClick={() => setFormat("script")}
+      <div className={styles.embedSnippet}>
+        <div className={styles.embedSnippetHead}>
+          <div
+            className={styles.embedSegmented}
+            role="tablist"
+            aria-label="Snippet format"
           >
-            Script loader
-          </button>
-          <button
-            type="button"
-            className={format === "iframe" ? styles.filterChipActive : styles.filterChip}
-            onClick={() => setFormat("iframe")}
-          >
-            Iframe fallback
-          </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={format === "script"}
+              className={`${styles.embedSeg} ${format === "script" ? styles.embedSegActive : ""}`}
+              onClick={() => setFormat("script")}
+            >
+              <span className={styles.embedSegLabel}>Script loader</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={format === "iframe"}
+              className={`${styles.embedSeg} ${format === "iframe" ? styles.embedSegActive : ""}`}
+              onClick={() => setFormat("iframe")}
+            >
+              <span className={styles.embedSegLabel}>Iframe fallback</span>
+            </button>
+          </div>
           <CopyButton value={activeSnippet} />
         </div>
-        <pre
-          style={{
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            margin: 0,
-            fontSize: 12.5,
-            fontFamily: "var(--font-mono, monospace)",
-          }}
-        >
-          {activeSnippet}
-        </pre>
+        <pre className={styles.embedSnippetCode}>{activeSnippet}</pre>
       </div>
     </div>
   );

@@ -20,7 +20,7 @@ function formatTime(iso: string): string {
 // "why" without leaving the panel.
 export function UsageConversationsTable({ rows }: { rows: ConversationCostRow[] }) {
   if (rows.length === 0) {
-    return <p className={styles.emptyState}>No conversation cost data for this client.</p>;
+    return <p className={styles.emptyStateBare}>No conversation cost data for this client.</p>;
   }
 
   return (

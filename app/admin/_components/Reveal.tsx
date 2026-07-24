@@ -1,22 +1,26 @@
 "use client";
 
 // Reveal — staggered entry for table rows, cards, and page-mount transitions.
-// Uses motion/react's whileInView so items fade-in only when scrolled into
-// view (not on mount thousands of rows deep). Honors prefers-reduced-motion
-// via the library's useReducedMotion() hook: when the user has reduced motion
-// on, the items render in their final state with zero transition.
 //
-// Per the redesign-skill canonical skeleton:
-//   <ul><Reveal index={0}><li>…</li></Reveal> <Reveal index={1}><li>…</li></Reveal> …</ul>
-// Each item is its own motion.div tagged with index → stagger = clamp(i*40ms, 0..320ms).
+// V2 (perf audit): the previous impl imported `motion/react` which shipped a
+// 40KB chunk to /admin/conversations/[id] for the equivalent of three opacity
+// fades. This version uses a 1KB IntersectionObserver + CSS transitions. Same
+// observable behavior, near-zero JS. Honors prefers-reduced-motion by leaving
+// items in their final state.
 
-import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function preferReduced(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
 
 export function Reveal({
   children,
   index = 0,
-  as = "div",
+  as: Tag = "div",
   className,
 }: {
   children: ReactNode;
@@ -24,82 +28,53 @@ export function Reveal({
   as?: "div" | "li" | "tr" | "article";
   className?: string;
 }) {
-  const reduce = useReducedMotion();
+  const ref = useRef<HTMLElement | null>(null);
+  const [shown, setShown] = useState(false);
 
-  // Motion wrapper. The library accepts any DOM element via the `as` prop
-  // when using the `motion(component)` pattern, but typed properly here.
-  const MotionTag = motion[as] as typeof motion.div;
-
-  if (reduce) {
-    // Reduced-motion: skip animation entirely, render the plain element so
-    // no transform/opacity are applied. Avoids the fade altogether.
-    return (
-      <MotionTag className={className} style={{ opacity: 1 }}>
-        {children}
-      </MotionTag>
+  useEffect(() => {
+    if (preferReduced()) {
+      setShown(true);
+      return;
+    }
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setShown(true);
+      return;
+    }
+    // stagger — clamp to 320ms so a 50-row table doesn't wait 2s for the last row
+    const delay = Math.min(index * 40, 320);
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            window.setTimeout(() => setShown(true), delay);
+            io.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: "0px 0px -40px 0px" },
     );
-  }
+    io.observe(el);
+    return () => io.disconnect();
+  }, [index]);
 
-  // Stagger — clamp index*40ms to a 320ms max so 50-row tables don't wait
-  // 2 seconds for the last row.
-  const delay = Math.min(index * 0.04, 0.32);
+  // When shown or reduced-motion: render the final state (no transform).
+  // Otherwise: invisible until the observer fires.
+  const style = shown
+    ? undefined
+    : {
+        opacity: 0,
+        transform: "translateY(6px)",
+      };
 
   return (
-    <MotionTag
+    <Tag
+      ref={ref as never}
       className={className}
-      initial={{ opacity: 0, y: 6 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "0px 0px -40px 0px" }}
-      transition={{ duration: 0.32, delay, ease: [0.22, 1, 0.36, 1] }}
+      style={style}
     >
       {children}
-    </MotionTag>
-  );
-}
-
-// RevealGroup — for staggering a known set of children without manually
-// passing index to each. Use for page-mount cards (Login card, Usage grid).
-export function RevealGroup({
-  children,
-  className,
-  stagger = 0.06,
-}: {
-  children: ReactNode[];
-  className?: string;
-  stagger?: number;
-}) {
-  const reduce = useReducedMotion();
-
-  if (reduce) {
-    return (
-      <div className={className}>
-        {children.map((c, i) => (
-          <div key={i} style={{ opacity: 1 }}>
-            {c}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className={className}>
-      {Array.isArray(children)
-        ? children.map((c, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{
-                duration: 0.32,
-                delay: i * stagger,
-                ease: [0.22, 1, 0.36, 1],
-              }}
-            >
-              {c}
-            </motion.div>
-          ))
-        : children}
-    </div>
+    </Tag>
   );
 }

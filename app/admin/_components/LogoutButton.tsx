@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LogoutIcon } from "./Icons";
 import styles from "../admin.module.css";
 
 // Small client island so the rest of the admin chrome can stay a Server
@@ -27,8 +28,10 @@ export function LogoutButton() {
       onClick={handleLogout}
       className={styles.logoutBtn}
       disabled={pending}
+      aria-label="Sign out"
     >
-      {pending ? "Signing out…" : "Sign out"}
+      <LogoutIcon size={14} />
+      <span>{pending ? "Signing out…" : "Sign out"}</span>
     </button>
   );
 }

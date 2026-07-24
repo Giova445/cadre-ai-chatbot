@@ -7,7 +7,7 @@ import styles from "../admin.module.css";
 // day in range) gives an at-a-glance trend without pulling in a charting lib.
 export function UsageDayTable({ rows }: { rows: DayUsageRow[] }) {
   if (rows.length === 0) {
-    return <p className={styles.emptyState}>No usage in this range.</p>;
+    return <p className={styles.emptyStateBare}>No usage in this range.</p>;
   }
 
   const maxCost = Math.max(...rows.map((r) => r.costUsd), 0.000001);

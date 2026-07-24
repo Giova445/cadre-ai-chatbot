@@ -186,6 +186,23 @@ button:focus-visible {
   border-radius: 999px;
   background: #2f9e63;
   box-shadow: 0 0 0 2px rgba(47,158,99,0.16);
+  transition: background 0.18s ease, box-shadow 0.18s ease;
+}
+/* status reflects the live panel state, not a constant "Online" pill:
+   thinking → amber pulse, error → red, online/idle → green. */
+.panel-status-dot[data-state="thinking"] {
+  background: #d99a2e;
+  box-shadow: 0 0 0 2px rgba(217,154,46,0.18);
+  animation: cadre-status-pulse 1.4s ease-in-out infinite;
+}
+.panel-status-dot[data-state="error"] {
+  background: var(--cadre-accent);
+  box-shadow: 0 0 0 2px rgba(219,69,69,0.20);
+}
+.panel-status-dot[data-state="online"],
+.panel-status-dot[data-state="idle"] {
+  background: #2f9e63;
+  box-shadow: 0 0 0 2px rgba(47,158,99,0.16);
 }
 .panel-close {
   flex-shrink: 0;
@@ -386,6 +403,10 @@ button:focus-visible {
 @keyframes cadre-bounce {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
   30% { transform: translateY(-3px); opacity: 1; }
+}
+@keyframes cadre-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

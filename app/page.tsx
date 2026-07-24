@@ -14,6 +14,14 @@ type Msg = {
   mode?: string; // answer | refuse | escalate
 };
 
+type PanelStatus = "idle" | "thinking" | "online" | "error";
+const STATUS_LABEL: Record<PanelStatus, string> = {
+  idle: "Online",
+  thinking: "Thinking…",
+  online: "Online",
+  error: "Offline",
+};
+
 const CONTACT_URL = "/contact";
 const CONTACT_EMAIL = "hello@gocadre.ai";
 
@@ -29,6 +37,7 @@ export default function Page() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<PanelStatus>("idle");
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   function scrollDown() {
@@ -43,6 +52,7 @@ export default function Page() {
     if (!q || busy) return;
     setInput("");
     setBusy(true);
+    setStatus("thinking");
 
     const outgoing: Msg[] = [...messages, { role: "user", content: q }];
     setMessages(outgoing);
@@ -69,6 +79,7 @@ export default function Page() {
 
       if (!res.ok || !res.body) {
         updateLast("Sorry, something went wrong. Please try again.", "escalate", []);
+        setStatus("error");
         return;
       }
 
@@ -83,8 +94,10 @@ export default function Page() {
         scrollDown();
       }
       updateLast(acc, mode, sources);
+      setStatus("online");
     } catch {
       updateLast("Sorry, the network dropped. Please try again.", "escalate", []);
+      setStatus("error");
     } finally {
       setBusy(false);
       scrollDown();
@@ -114,9 +127,9 @@ export default function Page() {
           <Wordmark className="wordmark" />
           <span className="brand-label">Support</span>
         </div>
-        <span className="status">
+        <span className="status" data-state={status}>
           <span className="status-dot" aria-hidden="true" />
-          Online
+          {STATUS_LABEL[status]}
         </span>
       </header>
 

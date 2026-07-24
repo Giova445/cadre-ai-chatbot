@@ -34,7 +34,10 @@ pnpm-debug.log*
 # ruflo / swarm local state (not part of the app)
 /.swarm/
 /.claude/
+/.claude-flow/
 ruvector.db
+agentdb.rvf
+agentdb.rvf.lock
 
 # installed agent skills (local dev tooling; reproducible via `npx skills add`)
 /.agents/
