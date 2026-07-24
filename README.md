@@ -4,9 +4,15 @@ A customer-support chatbot for **Cadre AI** (an applied-AI consultancy), grown f
 
 The chatbot answers **only** from a knowledge base (bundled docs, or a live pgvector store fed by uploads/crawls), **refuses to invent** facts it cannot ground (pricing, services, certifications), and **escalates** — book a strategy call, hand off to a human, capture a lead — whenever retrieval is weak or the request is out of scope.
 
-**Live:** <https://cadre-ai-chatbot-gules.vercel.app>
+**Live:** <https://cadre-ai-chatbot-gules.vercel.app> · **System map (interactive graph):** [cadre-ai-chatbot-gules.vercel.app/architecture.html](https://cadre-ai-chatbot-gules.vercel.app/architecture.html) (or open [`public/architecture.html`](public/architecture.html) locally)
 
 > Deep-dive docs: [ARCHITECTURE.md](ARCHITECTURE.md) (design of record) · [SPEC.md](SPEC.md) (frozen contracts) · [DECISIONS.md](DECISIONS.md) (build log, DEC-1 → DEC-8) · [TRADEOFFS.md](TRADEOFFS.md) (right-sizing) · [plan.md](plan.md) / [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (original contract) · [docs/product/](docs/product/) (architecture + implementation plans for every pillar below).
+
+## System map
+
+**[→ Open the interactive dependency graph](public/architecture.html)** (or the live copy at `/architecture.html` on the deploy above) — every real symbol in the codebase as a node, every real import/call/reference as an edge, clustered into labeled communities (Budget Management, Widget Host Configuration, Data Ingestion and Retrieval, Chat API Operations, …) you can pan, zoom, search, and click through. Companion prose summary: **[docs/GRAPH_REPORT.md](docs/GRAPH_REPORT.md)** (hub list + community breakdown).
+
+Generated with **[Graphify](https://github.com/safishamsi/graphify)** (`uv tool install graphifyy[openai]`) — local, deterministic tree-sitter AST parsing over all 185 source files (1,339 nodes, 2,378 edges, 98% extracted / 2% inferred), with an LLM pass only to *name* the resulting communities (`graphify label .`, ~$0.001 in tokens against the project's own OpenAI key). It's a **living** artifact, not a one-off export: re-run `graphify update .` after code changes and `graphify label .` to refresh the labels, then copy `graphify-out/graph.html` → `public/architecture.html` and `graphify-out/GRAPH_REPORT.md` → `docs/GRAPH_REPORT.md`. The raw `graphify-out/` working directory (cache, full `graph.json`) is gitignored and regenerable; only the two rendered artifacts are committed.
 
 ---
 
