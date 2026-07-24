@@ -18,6 +18,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^4.0.18",
     "@mozilla/readability": "^0.6.0",
+    "@phosphor-icons/react": "^2.1.10",
     "ai": "^7.0.35",
     "gray-matter": "^4.0.3",
     "linkedom": "^0.18.13",
