@@ -11,6 +11,10 @@ import { sanitizeStarters } from "@/lib/starters";
 
 export type WidgetPosition = "bottom-right" | "bottom-left";
 export type WidgetTheme = "auto" | "light" | "dark";
+// "launcher" (default) = today's floating-bubble behavior, unchanged.
+// "inline" = mount the visible panel into `target` (a CSS selector), in page
+// flow — no bubble, no fixed positioning. See docs/product/admin-embed-and-sitemap.md § A3.
+export type WidgetMode = "launcher" | "inline";
 
 export type WidgetConfig = {
   readonly client: string;
@@ -26,6 +30,12 @@ export type WidgetConfig = {
   // "no chips", honored as-is. Typed as a mutable array (not `readonly`) so it
   // can be passed straight into lib/starters' `resolveStarters({ snippet })`.
   readonly starters: string[] | null;
+  // NEW — render mode. Default "launcher" (current behavior).
+  readonly mode: WidgetMode;
+  // NEW — inline mount selector (CSS selector string); null in launcher mode
+  // or when the operator didn't supply one (index.ts then falls back to the
+  // loader <script>'s parent element).
+  readonly target: string | null;
 };
 
 // `window.CadreChat` — set by the host page BEFORE the loader <script> tag.
@@ -39,6 +49,8 @@ export type CadreChatOverrides = Partial<{
   theme: string;
   contactUrl: string;
   starters: unknown; // string[] | JSON string | "|"-delimited string
+  mode: string;
+  target: string;
 }>;
 
 // The loader <script>'s `data-*` attributes (i.e. HTMLScriptElement.dataset).
@@ -52,13 +64,19 @@ export type WidgetDataset = Partial<{
   theme: string;
   contactUrl: string;
   starters: string;
+  mode: string;
+  target: string;
 }>;
 
-const DEFAULT_COLOR = "#db4545"; // brand coral-red (app/globals.css --red)
-const DEFAULT_POSITION: WidgetPosition = "bottom-right";
-const DEFAULT_GREETING = "Hi! Ask me anything about Cadre AI.";
-const DEFAULT_LAUNCHER_LABEL = "Chat with us";
-const DEFAULT_THEME: WidgetTheme = "auto";
+// Exported so consumers that must stay correct-by-construction against these
+// defaults (the admin embed-snippet generator — lib/widget-snippet.ts) import
+// them rather than duplicating the values.
+export const DEFAULT_COLOR = "#db4545"; // brand coral-red (app/globals.css --red)
+export const DEFAULT_POSITION: WidgetPosition = "bottom-right";
+export const DEFAULT_GREETING = "Hi! Ask me anything about Cadre AI.";
+export const DEFAULT_LAUNCHER_LABEL = "Chat with us";
+export const DEFAULT_THEME: WidgetTheme = "auto";
+export const DEFAULT_MODE: WidgetMode = "launcher";
 
 function isPosition(value: string | undefined): value is WidgetPosition {
   return value === "bottom-right" || value === "bottom-left";
@@ -66,6 +84,10 @@ function isPosition(value: string | undefined): value is WidgetPosition {
 
 function isTheme(value: string | undefined): value is WidgetTheme {
   return value === "auto" || value === "light" || value === "dark";
+}
+
+function isMode(value: string | undefined): value is WidgetMode {
+  return value === "launcher" || value === "inline";
 }
 
 /**
@@ -142,6 +164,12 @@ export function parseConfig(
   const starters =
     o.starters !== undefined ? parseStarters(o.starters) : parseStarters(dataset.starters);
 
+  const modeRaw = o.mode ?? dataset.mode;
+  const mode = isMode(modeRaw) ? modeRaw : DEFAULT_MODE;
+
+  const targetRaw = o.target ?? dataset.target;
+  const target = typeof targetRaw === "string" && targetRaw.trim().length > 0 ? targetRaw.trim() : null;
+
   return Object.freeze({
     client,
     apiBase,
@@ -152,6 +180,8 @@ export function parseConfig(
     theme,
     contactUrl,
     starters,
+    mode,
+    target,
   });
 }
 

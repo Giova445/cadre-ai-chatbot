@@ -17,8 +17,10 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.18",
+    "@mozilla/readability": "^0.6.0",
     "ai": "^7.0.35",
     "gray-matter": "^4.0.3",
+    "linkedom": "^0.18.13",
     "next": "^15.5.0",
     "postgres": "^3.4.9",
     "react": "^19.0.0",

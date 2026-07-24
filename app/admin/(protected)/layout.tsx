@@ -68,6 +68,12 @@ export default async function ProtectedAdminLayout({
             <Link href="/admin/usage" className={styles.navLink}>
               Usage
             </Link>
+            <Link href="/admin/embed" className={styles.navLink}>
+              Embed
+            </Link>
+            <Link href="/admin/sitemap" className={styles.navLink}>
+              Sitemap
+            </Link>
             {showSelector && <ClientSelector clients={clients} />}
             <LogoutButton />
           </nav>

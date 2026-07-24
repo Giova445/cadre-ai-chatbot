@@ -44,9 +44,29 @@ function applyStyles(shadowRoot: ShadowRoot, css: string): void {
   shadowRoot.appendChild(style);
 }
 
+// Inline mode has no fixed corner: it mounts into a page-flow container —
+// `cfg.target` (a CSS selector) if it resolves, else the loader <script>'s
+// parent element, else `document.body` as a last resort.
+function resolveInlineContainer(
+  cfg: WidgetConfig,
+  scriptEl: HTMLScriptElement | null | undefined,
+): Element {
+  if (cfg.target) {
+    const found = document.querySelector(cfg.target);
+    if (found) return found;
+  }
+  if (scriptEl?.parentNode instanceof Element) return scriptEl.parentNode;
+  return document.body;
+}
+
 /** Idempotent: a second call (e.g. the snippet pasted twice) reuses the
- * existing host instead of double-mounting. */
-export function mountHost(cfg: WidgetConfig): WidgetHost {
+ * existing host instead of double-mounting. `scriptEl` is only consulted in
+ * `mode:"inline"` (as the fallback mount point) — the launcher path ignores it
+ * and always appends to `document.body`, unchanged from before. */
+export function mountHost(
+  cfg: WidgetConfig,
+  scriptEl?: HTMLScriptElement | null,
+): WidgetHost {
   const existing = document.getElementById(HOST_ID) as HTMLDivElement | null;
   if (existing?.shadowRoot) {
     const root = existing.shadowRoot.getElementById(ROOT_ID);
@@ -55,7 +75,8 @@ export function mountHost(cfg: WidgetConfig): WidgetHost {
 
   const element = document.createElement("div");
   element.id = HOST_ID;
-  element.className = `cadre-pos-${cfg.position} cadre-theme-${cfg.theme}`;
+  const positionClass = cfg.mode === "inline" ? "cadre-inline" : `cadre-pos-${cfg.position}`;
+  element.className = `${positionClass} cadre-theme-${cfg.theme}`;
   element.style.setProperty("--cadre-accent", cfg.color);
 
   const shadowRoot = element.attachShadow({ mode: "open" });
@@ -65,7 +86,8 @@ export function mountHost(cfg: WidgetConfig): WidgetHost {
   root.id = ROOT_ID;
   shadowRoot.appendChild(root);
 
-  document.body.appendChild(element);
+  const container = cfg.mode === "inline" ? resolveInlineContainer(cfg, scriptEl) : document.body;
+  container.appendChild(element);
 
   return { root, element };
 }

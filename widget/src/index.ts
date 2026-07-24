@@ -17,7 +17,18 @@ const currentScript = document.currentScript as HTMLScriptElement | null;
 
 function boot(): void {
   const cfg = readConfig(currentScript);
-  const { root, element: hostEl } = mountHost(cfg);
+  const { root, element: hostEl } = mountHost(cfg, currentScript);
+
+  // mode:"inline" — mount the panel, visible, into the target container; no
+  // launcher, no toggle, no unread badge, no Esc-to-close (there's nothing to
+  // close). Everything else (Shadow DOM, transport, session, starters) is the
+  // same createPanel() the launcher path uses.
+  if (cfg.mode === "inline") {
+    const panel = createPanel(cfg);
+    panel.element.hidden = false;
+    root.append(panel.element);
+    return;
+  }
 
   let open = false;
   let unread = 0;

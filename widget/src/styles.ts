@@ -43,6 +43,16 @@ export function buildStyles(): string {
   right: auto;
   left: 20px;
 }
+/* mode:"inline" — no floating corner, no launcher; sizes to its container. */
+:host(.cadre-inline) {
+  position: static;
+  bottom: auto;
+  right: auto;
+  left: auto;
+  z-index: auto;
+  display: block;
+  width: 100%;
+}
 @media (prefers-color-scheme: dark) {
   :host(:not(.cadre-theme-light)) {
     --sand: #14110e;
@@ -139,6 +149,13 @@ button:focus-visible {
   animation: cadre-rise 0.2s cubic-bezier(0.16,1,0.3,1) both;
 }
 :host(.cadre-pos-bottom-left) .cadre-panel { right: auto; left: 0; }
+/* inline mode: panel lives in page flow, not floated above the launcher. */
+:host(.cadre-inline) .cadre-panel {
+  position: static;
+  width: 100%;
+  height: 480px;
+  animation: none;
+}
 
 .panel-header {
   display: flex;

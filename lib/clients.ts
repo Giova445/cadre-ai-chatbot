@@ -44,6 +44,19 @@ export function isKnownClient(id: string): boolean {
 }
 
 /**
+ * The registry's id list (for the admin embed panel's client dropdown — the
+ * union of "configured" ids here and "live" ids from clientRepo.listClients(),
+ * per docs/product/admin-embed-and-sitemap.md § A6). Empty when CLIENT_REGISTRY
+ * is unset (dev/allow-all parity). Does not change resolveClient's behavior.
+ */
+export function listRegisteredClients(): { id: string; origins: string[] }[] {
+  return Array.from(REGISTRY.entries()).map(([id, origins]) => ({
+    id,
+    origins: Array.from(origins),
+  }));
+}
+
+/**
  * Resolve an untrusted body `client` (+ browser Origin) to a canonical tenant id.
  *  - no client                 ⇒ "default"
  *  - no registry configured    ⇒ the sanitized client (dev/allow-all parity)

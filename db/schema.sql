@@ -199,3 +199,45 @@ create table if not exists usage_budgets (
   primary key (scope, client_id)
 );
 alter table usage_budgets enable row level security;
+
+-- Sitemap crawl (applied via MCP migration cadre_sitemap_crawl). Crawl-run header
+-- + per-URL work/dedup/status ledger. Crawled pages land in documents/kb_chunks
+-- via the shared lib/ingest/core.ts (source = url).
+create table if not exists crawl_jobs (
+  id          uuid primary key default gen_random_uuid(),
+  client_id   text not null default 'default',
+  sitemap_url text not null,
+  host        text not null,
+  status      text not null default 'queued',   -- queued | crawling | done | error
+  discovered  int  not null default 0,
+  embedded    int  not null default 0,
+  skipped     int  not null default 0,
+  failed      int  not null default 0,
+  error       text,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create index if not exists crawl_jobs_client_idx on crawl_jobs (client_id, created_at desc);
+
+create table if not exists sitemap_pages (
+  id             uuid primary key default gen_random_uuid(),
+  crawl_job_id   uuid not null references crawl_jobs(id) on delete cascade,
+  client_id      text not null default 'default',
+  url            text not null,
+  lastmod        timestamptz,
+  etag           text,
+  content_hash   text,
+  status         text not null default 'queued', -- queued | embedded | skipped | failed
+  skip_reason    text,                            -- robots|noindex|unchanged|empty|no_text|non_html
+  chunks         int  not null default 0,
+  error          text,
+  robots_allowed boolean not null default true,
+  last_crawled   timestamptz,
+  created_at     timestamptz not null default now(),
+  unique (client_id, url)
+);
+create index if not exists sitemap_pages_job_idx    on sitemap_pages (crawl_job_id, status);
+create index if not exists sitemap_pages_client_idx on sitemap_pages (client_id, url);
+
+alter table crawl_jobs    enable row level security;
+alter table sitemap_pages enable row level security;
