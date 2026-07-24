@@ -13,7 +13,7 @@ import { buildSystem, buildConversation } from "@/lib/prompt";
 import { groundedStub, responseForDecision } from "@/lib/responses";
 import { corsHeaders, isOriginAllowed } from "@/lib/cors";
 import { rateLimit } from "@/lib/ratelimit";
-import { logTurn } from "@/lib/trace";
+import { logTurn, classifyForTrace } from "@/lib/trace";
 import { RETRIEVAL_BACKEND, EMBED_MODEL, CHAT_MODEL } from "@/lib/config";
 import { recordUsage } from "@/lib/usage/record";
 import { checkBudget } from "@/lib/usage/budget";
@@ -354,13 +354,16 @@ function scheduleTurnLog(args: {
 }): void {
   after(async () => {
     const assistantMessage = await args.assistantMessage;
+    // Display-only reclassification for the admin trace — never affects the
+    // response already streamed to the user (see lib/trace.ts classifyForTrace).
+    const decision = classifyForTrace(args.decision, assistantMessage);
     await logTurn({
       sessionId: args.sid,
       clientId: args.clientId,
       userMessage: args.query,
       assistantMessage,
       query: args.query,
-      decision: args.decision,
+      decision,
       results: args.results,
       embedderModel: TRACE_EMBEDDER,
       backend: RETRIEVAL_BACKEND,

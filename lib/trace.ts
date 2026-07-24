@@ -9,9 +9,34 @@
 import { getDb } from "@/lib/db";
 import { CITATION_FLOOR } from "@/lib/admin/contracts";
 import type { LogTurnInput, TraceChunkRow } from "@/lib/admin/contracts";
+import type { Decision } from "@/lib/guardrail";
 import type { Retrieved } from "@/lib/types";
 
 const DEFAULT_CLIENT = "default";
+
+// The system prompt (lib/prompt.ts) requires every grounded LLM answer to cite
+// "(source: <filename>)", and the offline stub (lib/responses.ts groundedStub)
+// always includes it too. Its absence is the reliable tell that the model
+// declined in-band (the SCOPE rule) even though decide() deferred that call to
+// the LLM online (guardrail.ts: a low-scoring-but-not-"weak" query like "what's
+// the weather" or "hi there" clears the mode-aware 0.05 threshold, so decide()
+// returns mode:"answer" and lets the model's own scope rule handle it).
+const CITATION_RE = /\(source:\s*[^)]+\)/i;
+
+/**
+ * Reclassify a Decision for PERSISTENCE ONLY, using the final assistant text —
+ * never the live decision, response bytes, or headers already sent to the user
+ * (those are untouched; this runs after the stream has flushed). Fixes the admin
+ * dashboard showing "Answered" for a turn whose actual reply politely declined
+ * (e.g. an off-topic question that cleared the online threshold). PURE, no DB.
+ */
+export function classifyForTrace(decision: Decision, assistantMessage: string): Decision {
+  if (decision.mode !== "answer") return decision;
+  if (CITATION_RE.test(assistantMessage)) return decision;
+  // Reuse "weak_retrieval" (not a new reason) — this is exactly the outcome
+  // decide() would have produced offline for the same not-actually-grounded turn.
+  return { ...decision, mode: "escalate", reason: "weak_retrieval", citations: [] };
+}
 
 /**
  * Map a retrieval result set to persisted trace-chunk rows. PURE (no DB) so it is
