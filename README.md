@@ -14,6 +14,27 @@ The chatbot answers **only** from a knowledge base (bundled docs, or a live pgve
 
 Generated with **[Graphify](https://github.com/safishamsi/graphify)** (`uv tool install graphifyy[openai]`) — local, deterministic tree-sitter AST parsing over all 185 source files (1,339 nodes, 2,378 edges, 98% extracted / 2% inferred), with an LLM pass only to *name* the resulting communities (`graphify label .`, ~$0.001 in tokens against the project's own OpenAI key). It's a **living** artifact, not a one-off export: re-run `graphify update .` after code changes and `graphify label .` to refresh the labels, then copy `graphify-out/graph.html` → `public/architecture.html` and `graphify-out/GRAPH_REPORT.md` → `docs/GRAPH_REPORT.md`. The raw `graphify-out/` working directory (cache, full `graph.json`) is gitignored and regenerable; only the two rendered artifacts are committed.
 
+<table>
+<tr><td width="55%">
+
+**Full graph** — 1,339 nodes across 85 labeled communities (color = community), the entire dependency structure of the app in one view.
+
+</td><td>
+
+**Zoomed on a hub node** — `ingestSource()` (the shared chunk→embed→upsert core), showing its real weighted in/out edges: every ingestion front-end (files, sitemap) converges on this one function.
+
+</td></tr>
+<tr><td>
+
+[![Full dependency graph](docs/screenshots/graph-overview.png)](public/architecture.html)
+
+</td><td>
+
+[![Zoomed view of the ingestSource hub node](docs/screenshots/graph-node-focus.png)](public/architecture.html)
+
+</td></tr>
+</table>
+
 ---
 
 ## The headline design choice, preserved through every pillar
